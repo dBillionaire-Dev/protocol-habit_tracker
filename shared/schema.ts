@@ -1,18 +1,83 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { users } from "./models/auth";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// Export auth tables
+export * from "./models/auth";
+
+// Habit Types
+export const HABIT_TYPES = ["avoidance", "build"] as const;
+export type HabitType = typeof HABIT_TYPES[number];
+
+export const habits = pgTable("habits", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  type: text("type", { enum: HABIT_TYPES }).notNull(),
+  baseTaskValue: integer("base_task_value"), // For build habits
+  unit: text("unit"), // reps, minutes, pages, sessions
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const habitEvents = pgTable("habit_events", {
+  id: serial("id").primaryKey(),
+  habitId: integer("habit_id").notNull().references(() => habits.id),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  value: integer("value").default(1).notNull(), // usually 1, but maybe more?
+  notes: text("notes"),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const dailyHabitStatus = pgTable("daily_habit_status", {
+  id: serial("id").primaryKey(),
+  habitId: integer("habit_id").notNull().references(() => habits.id),
+  date: date("date").notNull(), // YYYY-MM-DD
+  completed: boolean("completed").default(false).notNull(),
+  penaltyLevel: integer("penalty_level").default(0).notNull(), // 0 = base task
+});
+
+export const habitDebts = pgTable("habit_debts", {
+  id: serial("id").primaryKey(),
+  habitId: integer("habit_id").notNull().unique().references(() => habits.id),
+  debtCount: integer("debt_count").default(0).notNull(),
+  lastCleanDate: date("last_clean_date"), // Track last confirmed clean day
+});
+
+// Schemas
+export const insertHabitSchema = createInsertSchema(habits).omit({ 
+  id: true, 
+  userId: true, 
+  createdAt: true 
+}).extend({
+  type: z.enum(HABIT_TYPES),
+  baseTaskValue: z.number().optional(),
+});
+
+export const insertHabitEventSchema = createInsertSchema(habitEvents).omit({ 
+  id: true, 
+  timestamp: true 
+});
+
+export const insertDailyStatusSchema = createInsertSchema(dailyHabitStatus).omit({ 
+  id: true 
+});
+
+// Types
+export type Habit = typeof habits.$inferSelect;
+export type InsertHabit = z.infer<typeof insertHabitSchema>;
+export type HabitEvent = typeof habitEvents.$inferSelect;
+export type DailyHabitStatus = typeof dailyHabitStatus.$inferSelect;
+export type HabitDebt = typeof habitDebts.$inferSelect;
+
+// API Types
+export type CreateHabitRequest = InsertHabit;
+export type LogEventRequest = { notes?: string };
+export type ConfirmCleanDayRequest = { date: string }; // YYYY-MM-DD
+export type CompleteDailyTaskRequest = { date: string, completed: boolean };
+
+export type HabitWithStatus = Habit & {
+  debt?: number; // For avoidance
+  todayTask?: number; // For build
+  todayCompleted?: boolean; // For build
+  penaltyLevel?: number; // For build
+};

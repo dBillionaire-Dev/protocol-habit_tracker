@@ -1,0 +1,173 @@
+Build a full-stack, installable Progressive Web App (PWA) using React, TypeScript, Tailwind CSS, and Supabase as the backend.
+
+App purpose
+The app is a personal discipline system that allows users to define and track their own habits, using strict accountability rules.
+
+Habit Types (User-defined)
+
+Users can create unlimited habits.
+Each habit must be one of two types:
+
+1. Avoidance Habits (Debt-based)
+
+Examples: porn, masturbation, anger, junk food, social media
+
+Rules
+
+The user logs an event every time the habit occurs
+
+Each logged event adds +1 debt for that habit
+
+Debt persists across days until worked off
+
+Clean day logic
+
+A day can only be marked as clean after 11:59 PM local time
+
+A clean day for a habit means zero events logged for that habit
+
+Each clean day reduces that habit’s debt by 1
+
+Debts can never go below zero
+
+2. Build Habits (Penalty-stacking)
+
+Examples: exercise, reading, praying, coding, studying
+
+When creating a build habit, the user must define:
+
+The daily required task (e.g. “50 pushups”, “30 minutes reading”)
+
+The unit (reps, minutes, pages, sessions)
+
+Rules
+
+Each day, the user confirms whether the habit was completed
+
+If the habit is completed → no penalty
+
+If the habit is missed:
+
+The next day’s required task doubles
+
+Penalties stack cumulatively
+
+Example
+
+Base task: 20 pushups
+
+Day 1 missed → Day 2 requires 40
+
+Day 2 missed → Day 3 requires 60
+
+Once completed, the requirement resets to the base task
+
+Penalties continue stacking until the habit is completed.
+
+Time-based Enforcement
+
+The app can be opened and used anytime
+
+Event logging is real-time
+
+Daily completion or clean-day confirmation can only be done after 11:59 PM local time
+
+Once a day is confirmed, it becomes immutable
+
+Dashboard / UI
+
+Home dashboard should display:
+
+List of all active habits
+
+For avoidance habits:
+
+Large, harsh red debt numbers
+
+For build habits:
+
+Today’s required task (including stacked penalties)
+
+Clear visual difference between habit types
+
+When a debt reaches zero or a build habit is completed, the UI should reflect success in a subtle, non-gamified way.
+
+Data Model (Supabase)
+
+Required tables:
+
+users
+
+habits
+
+id
+
+user_id
+
+name
+
+type (avoidance | build)
+
+base_task_value
+
+unit
+
+created_at
+
+habit_events
+
+id
+
+habit_id
+
+timestamp
+
+value (usually 1)
+
+daily_habit_status
+
+habit_id
+
+date
+
+completed
+
+penalty_level
+
+habit_debts
+
+habit_id
+
+debt_count
+
+All states must be reproducible from logs.
+
+PWA Requirements
+
+Installable on mobile and desktop
+
+Offline-first logging with background sync
+
+Local-time–aware (not UTC-only)
+
+Design
+
+Minimal, serious, discipline-focused UI
+
+No gamification, no streak fireworks, no social features
+
+Tailwind CSS
+
+Mobile-first
+
+Engineering Requirements
+
+Strict TypeScript
+
+Strong Supabase RLS rules
+
+Clear separation of UI, logic, and data layers
+
+Scalable for future analytics
+
+Build the full app structure, database schema, core logic, and UI.

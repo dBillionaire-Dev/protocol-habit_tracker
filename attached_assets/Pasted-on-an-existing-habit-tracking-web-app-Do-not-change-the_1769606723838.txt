@@ -1,0 +1,163 @@
+on an existing habit-tracking web app.
+Do not change the current styling. Use the provided images only as visual reference for placement and behavior, not for redesign.
+Do not remove the habit delete functionality.
+
+Daily Confirmation Window
+
+The confirmation window for:
+
+A clean day on avoidance habits
+
+A successful day for building habits
+
+Must be accessible only between 11:00 PM and 12:00 AM (midnight) every day (1 hour window).
+
+Outside this window:
+
+Confirmation actions must be disabled and visually inactive.
+
+Day Confirmation Card
+
+Add a Day Confirmation Card to the dashboard that:
+
+Clearly shows:
+
+“Day confirmation available from 11:00 PM – 12:00 AM”
+
+A live countdown timer showing:
+
+Hours and minutes remaining until confirmation closes
+
+This card should:
+
+Be visible at all times
+
+Only become active/highlighted during the 11 PM–12 AM window
+
+Automation Rules at 12:00 AM
+
+At exactly 12:00 AM (local time), run automatic evaluations:
+
+Building Habits
+
+If the user did not confirm a successful day during the 11 PM–12 AM window:
+
+Automatically mark the day as a failed attempt
+
+Carry this failure forward into the habit history
+
+This should happen without user input
+
+Avoidance Habits
+
+If no event was logged for the day:
+
+Automatically mark the day as a clean day
+
+Allow this clean day to cancel an existing debt
+
+If one or more events were logged:
+
+Keep the events
+
+Add them to the total event count
+
+If not confirmed during the window, they should still be counted automatically
+
+Button Behavior Rules
+
+The Clean button (avoidance habits):
+
+Only clickable and highlighted between 11 PM – 12 AM
+
+The Execute / Complete button (building habits):
+
+Only clickable and highlighted between 11 PM – 12 AM
+
+Outside this window, buttons must:
+
+Be disabled
+
+Appear visually inactive
+
+Avoidance Habit UI Adjustment
+
+Change the failure “X” button on avoidance habits to a “+” button
+
+The “+” button means:
+
+“Add an event”
+
+It increases the event count for that habit
+
+Streak Tracking
+
+Add a Streak section on the dashboard that shows:
+
+For each habit
+
+Current streak
+
+Consecutive days of:
+
+Successfully doing a building habit, or
+
+Avoiding an avoidance habit
+
+Longest streak
+
+Stored historically
+
+Remains visible even if the streak is broken
+
+Display format
+
+Show streaks in:
+
+Number of days
+
+Start and end dates
+
+Date Display
+
+Display the current date at the top right of the dashboard
+
+This date should:
+
+Be used internally for streak calculations
+
+Drive daily automation logic
+
+Bug Fix – New Building Habit Failure Issue
+
+Fix the issue where:
+
+Creating a new building habit immediately adds a failed attempt
+
+Example:
+
+Creating “Code for 2 hours”
+
+Automatically showing “4 hours” as if a failure already occurred
+
+Correct behavior:
+
+A newly created habit should:
+
+Start with zero failures
+
+Not affect streaks or totals until the first full day passes
+
+Only be evaluated after the first valid confirmation window
+
+General Rules
+
+All time logic must be timezone-aware
+
+Daily checks must run exactly at 12:00 AM
+
+Do not introduce new styling
+
+Do not remove existing delete functionality
+
+Keep the implementation clean and maintainable

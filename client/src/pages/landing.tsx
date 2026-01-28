@@ -1,8 +1,10 @@
-import { Link } from "wouter";
-import { Shield, Lock, Activity, TrendingUp } from "lucide-react";
+import { Shield, Lock, Activity, TrendingUp, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Landing() {
+  const { loginAsGuest, isGuestLoggingIn } = useAuth();
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
       {/* Left Panel: Branding */}
@@ -58,11 +60,31 @@ export default function Landing() {
           </div>
 
           <div className="space-y-4">
-            <Button className="w-full h-12 text-base shadow-lg" asChild>
+            <Button className="w-full h-12 text-base shadow-lg" asChild data-testid="button-login">
               <a href="/api/login">
                 <Lock className="w-4 h-4 mr-2" />
                 Authenticate with Replit
               </a>
+            </Button>
+            
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or</span>
+              </div>
+            </div>
+
+            <Button 
+              variant="outline" 
+              className="w-full h-12 text-base"
+              onClick={() => loginAsGuest()}
+              disabled={isGuestLoggingIn}
+              data-testid="button-guest-login"
+            >
+              <User className="w-4 h-4 mr-2" />
+              {isGuestLoggingIn ? "Loading..." : "Continue as Guest"}
             </Button>
             
             <p className="text-xs text-center text-muted-foreground px-8">

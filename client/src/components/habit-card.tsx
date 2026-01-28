@@ -1,9 +1,10 @@
 import { type HabitWithStatus } from "@shared/schema";
 import { useLogHabitEvent, useConfirmCleanDay, useCompleteDaily, useDeleteHabit } from "@/hooks/use-habits";
+import { useConfirmationWindow } from "@/components/day-confirmation-card";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Check, X, Trash2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Check, Plus, Trash2, AlertTriangle, ShieldCheck, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -24,22 +25,21 @@ interface HabitCardProps {
 
 export function HabitCard({ habit }: HabitCardProps) {
   const deleteMutation = useDeleteHabit();
-  
-  // Handlers for Avoidance
   const logEventMutation = useLogHabitEvent();
   const confirmCleanMutation = useConfirmCleanDay();
-
-  // Handlers for Build
   const completeMutation = useCompleteDaily();
+  const { isWindowOpen } = useConfirmationWindow();
 
   const today = format(new Date(), "yyyy-MM-dd");
-  const isEndOfDay = new Date().getHours() >= 20; // Allow confirming clean day after 8 PM for UX, though server validates strictness if needed
 
   const handleDelete = () => {
     deleteMutation.mutate(habit.id);
   };
 
   if (habit.type === "avoidance") {
+    const todayEvents = habit.todayEvents || 0;
+    const isClean = todayEvents === 0;
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -47,59 +47,65 @@ export function HabitCard({ habit }: HabitCardProps) {
         transition={{ duration: 0.3 }}
       >
         <Card className={cn(
-          "border-l-4 transition-all hover:shadow-lg",
-          habit.debt && habit.debt > 0 ? "border-l-destructive shadow-destructive/5" : "border-l-emerald-500"
+          "transition-all",
+          habit.debt && habit.debt > 0 ? "border-destructive/30" : "border-border"
         )}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-lg font-bold tracking-tight">{habit.name}</CardTitle>
-            <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 gap-2">
+            <div>
+              <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
+              <p className="text-xs text-muted-foreground">Avoidance</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className={cn(
+                "text-3xl font-mono font-bold",
+                habit.debt && habit.debt > 0 ? "text-destructive" : "text-muted-foreground"
+              )}>
+                {habit.debt || 0}
+              </span>
+              <span className="text-xs text-muted-foreground">debt</span>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="flex items-end justify-between">
+          <CardContent className="pb-3">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-1">Current Debt</p>
-                <div className={cn(
-                  "text-4xl font-mono font-bold tracking-tighter",
-                  habit.debt && habit.debt > 0 ? "text-destructive" : "text-muted-foreground"
-                )}>
-                  {habit.debt || 0}
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground mb-1">Status</p>
-                {habit.debt && habit.debt > 0 ? (
-                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-destructive/10 text-destructive">
-                    <AlertTriangle className="w-3 h-3 mr-1" />
-                    Compromised
-                  </span>
+                <p className="text-xs text-muted-foreground mb-1">Today</p>
+                {isClean ? (
+                  <span className="text-emerald-500 font-medium text-sm">Clean</span>
                 ) : (
-                  <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-500">
-                    <ShieldCheck className="w-3 h-3 mr-1" />
-                    Secure
-                  </span>
+                  <span className="text-orange-500 font-medium text-sm">{todayEvents} event{todayEvents !== 1 ? 's' : ''}</span>
                 )}
               </div>
+              
+              {/* Log Event Button (+) */}
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={() => logEventMutation.mutate({ id: habit.id })}
+                disabled={logEventMutation.isPending}
+                data-testid={`button-log-event-${habit.id}`}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Log
+              </Button>
             </div>
           </CardContent>
-          <CardFooter className="grid grid-cols-2 gap-3">
+          <CardFooter className="flex gap-2 pt-0">
             <Button 
-              variant="outline" 
-              className="w-full hover:bg-destructive hover:text-destructive-foreground border-destructive/20 text-destructive"
-              onClick={() => logEventMutation.mutate({ id: habit.id })}
-              disabled={logEventMutation.isPending}
-            >
-              <X className="w-4 h-4 mr-2" />
-              Failure
-            </Button>
-            <Button 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+              className={cn(
+                "flex-1",
+                isWindowOpen 
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                  : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}
               onClick={() => confirmCleanMutation.mutate({ id: habit.id, date: today })}
-              disabled={confirmCleanMutation.isPending}
-              title="Confirm clean day (usually evening)"
+              disabled={!isWindowOpen || confirmCleanMutation.isPending || !isClean}
+              data-testid={`button-clean-${habit.id}`}
             >
               <Check className="w-4 h-4 mr-2" />
-              Clean
+              {isWindowOpen ? (isClean ? "Confirm Clean" : "Has Events") : "Window Closed"}
             </Button>
+            <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
           </CardFooter>
         </Card>
       </motion.div>
@@ -107,6 +113,10 @@ export function HabitCard({ habit }: HabitCardProps) {
   }
 
   // Build Habit Card
+  const penaltyText = habit.penaltyLevel && habit.penaltyLevel > 0 
+    ? `Penalty stacked from ${habit.baseTaskValue} base` 
+    : null;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -114,53 +124,64 @@ export function HabitCard({ habit }: HabitCardProps) {
       transition={{ duration: 0.3 }}
     >
       <Card className={cn(
-        "border-l-4 border-l-primary transition-all hover:shadow-lg",
-        habit.todayCompleted && "opacity-75"
+        "transition-all",
+        habit.todayCompleted && "opacity-80"
       )}>
-        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-          <CardTitle className="text-lg font-bold tracking-tight">{habit.name}</CardTitle>
-          <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-end">
-              <div>
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-1">Today's Protocol</p>
-                <div className="text-3xl font-mono font-bold">
-                  {habit.todayTask || habit.baseTaskValue} <span className="text-lg font-normal text-muted-foreground">{habit.unit}</span>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-1">Penalty Level</p>
-                <div className={cn(
-                  "text-xl font-bold font-mono",
-                  (habit.penaltyLevel || 0) > 0 ? "text-orange-500" : "text-muted-foreground"
-                )}>
-                  Lvl {habit.penaltyLevel || 0}
-                </div>
-              </div>
+        <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 gap-2">
+          <div>
+            <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
+            <p className="text-xs text-muted-foreground">Build</p>
+          </div>
+          {habit.currentStreak && habit.currentStreak > 0 ? (
+            <div className="flex items-center gap-1 text-orange-500">
+              <Flame className="w-4 h-4" />
+              <span className="text-sm font-mono font-bold">{habit.currentStreak}</span>
             </div>
+          ) : null}
+        </CardHeader>
+        <CardContent className="pb-3">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Today's requirement</p>
+            <div className="flex items-baseline gap-2">
+              <span className={cn(
+                "text-2xl font-mono font-bold",
+                habit.penaltyLevel && habit.penaltyLevel > 0 ? "text-orange-500" : ""
+              )}>
+                {habit.todayTask || habit.baseTaskValue}
+              </span>
+              <span className="text-sm text-muted-foreground">{habit.unit}</span>
+            </div>
+            {penaltyText && (
+              <p className="text-xs text-orange-500 mt-1">{penaltyText}</p>
+            )}
           </div>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="flex gap-2 pt-0">
           {habit.todayCompleted ? (
             <Button 
               variant="secondary" 
-              className="w-full cursor-default bg-primary/10 text-primary hover:bg-primary/10"
+              className="flex-1 cursor-default bg-primary/10 text-primary hover:bg-primary/10"
               disabled
             >
               <Check className="w-4 h-4 mr-2" />
-              Completed for Today
+              Completed
             </Button>
           ) : (
             <Button 
-              className="w-full" 
+              className={cn(
+                "flex-1",
+                isWindowOpen 
+                  ? "" 
+                  : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}
               onClick={() => completeMutation.mutate({ id: habit.id, date: today, completed: true })}
-              disabled={completeMutation.isPending}
+              disabled={!isWindowOpen || completeMutation.isPending}
+              data-testid={`button-complete-${habit.id}`}
             >
-              Execute Protocol
+              {isWindowOpen ? "Execute Protocol" : "Window Closed"}
             </Button>
           )}
+          <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
         </CardFooter>
       </Card>
     </motion.div>
@@ -171,7 +192,7 @@ function DeleteButton({ onDelete, isDeleting }: { onDelete: () => void, isDeleti
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" data-testid="button-delete-habit">
           <Trash2 className="w-4 h-4" />
         </Button>
       </AlertDialogTrigger>

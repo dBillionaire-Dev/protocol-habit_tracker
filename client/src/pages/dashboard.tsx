@@ -2,11 +2,22 @@ import { useHabits } from "@/hooks/use-habits";
 import { LayoutShell } from "@/components/layout-shell";
 import { HabitCard } from "@/components/habit-card";
 import { CreateHabitDialog } from "@/components/create-habit-dialog";
+import { DayConfirmationCard } from "@/components/day-confirmation-card";
+import { StreakCard } from "@/components/streak-card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Calendar, RefreshCw } from "lucide-react";
+import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@shared/routes";
 
 export default function Dashboard() {
   const { data: habits, isLoading, error } = useHabits();
+  const queryClient = useQueryClient();
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: [api.habits.list.path] });
+  };
 
   if (isLoading) {
     return (
@@ -30,10 +41,12 @@ export default function Dashboard() {
 
   const avoidanceHabits = habits?.filter(h => h.type === "avoidance") || [];
   const buildHabits = habits?.filter(h => h.type === "build") || [];
+  const today = new Date();
 
   return (
     <LayoutShell>
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Header with Date */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Daily Protocols</h1>
@@ -41,19 +54,36 @@ export default function Dashboard() {
               Maintain discipline. Eliminate weakness.
             </p>
           </div>
-          <CreateHabitDialog />
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-lg font-semibold">{format(today, "EEEE")}</p>
+              <p className="text-sm text-muted-foreground flex items-center gap-1 justify-end">
+                <Calendar className="w-3 h-3" />
+                {format(today, "MMMM d, yyyy")}
+              </p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleRefresh} data-testid="button-refresh">
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Top Cards: Streaks + Day Confirmation */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <StreakCard habits={habits || []} />
+          <DayConfirmationCard />
         </div>
 
         {/* Avoidance Section */}
         <section className="space-y-4">
           <div className="flex items-center gap-2 border-b border-border/50 pb-2">
-            <h2 className="text-lg font-semibold tracking-tight text-destructive">AVOIDANCE PROTOCOLS</h2>
+            <h2 className="text-lg font-semibold tracking-tight uppercase text-destructive">Avoid</h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-mono">
               {avoidanceHabits.length}
             </span>
           </div>
           
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {avoidanceHabits.length > 0 ? (
               avoidanceHabits.map(habit => (
                 <HabitCard key={habit.id} habit={habit} />
@@ -65,15 +95,15 @@ export default function Dashboard() {
         </section>
 
         {/* Build Section */}
-        <section className="space-y-4 pt-4">
+        <section className="space-y-4 pt-2">
           <div className="flex items-center gap-2 border-b border-border/50 pb-2">
-            <h2 className="text-lg font-semibold tracking-tight text-primary">BUILD PROTOCOLS</h2>
+            <h2 className="text-lg font-semibold tracking-tight uppercase text-primary">Build</h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono">
               {buildHabits.length}
             </span>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {buildHabits.length > 0 ? (
               buildHabits.map(habit => (
                 <HabitCard key={habit.id} habit={habit} />
@@ -83,6 +113,11 @@ export default function Dashboard() {
             )}
           </div>
         </section>
+
+        {/* New Habit Button */}
+        <div className="pt-4">
+          <CreateHabitDialog />
+        </div>
       </div>
     </LayoutShell>
   );
@@ -108,9 +143,13 @@ function DashboardSkeleton() {
         </div>
         <Skeleton className="h-10 w-32" />
       </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+      </div>
       <div className="space-y-4">
         <Skeleton className="h-6 w-32" />
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map(i => (
             <Skeleton key={i} className="h-48 w-full rounded-xl" />
           ))}

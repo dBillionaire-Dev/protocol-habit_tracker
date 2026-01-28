@@ -1,8 +1,9 @@
+import { useState, useEffect, useCallback } from "react";
 import { useHabits } from "@/hooks/use-habits";
 import { LayoutShell } from "@/components/layout-shell";
 import { HabitCard } from "@/components/habit-card";
 import { CreateHabitDialog } from "@/components/create-habit-dialog";
-import { DayConfirmationCard } from "@/components/day-confirmation-card";
+import { DayConfirmationCard, calculateWindowState } from "@/components/day-confirmation-card";
 import { StreakCard } from "@/components/streak-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Calendar, RefreshCw } from "lucide-react";
@@ -10,14 +11,47 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@shared/routes";
+import { cn } from "@/lib/utils";
 
 export default function Dashboard() {
-  const { data: habits, isLoading, error } = useHabits();
+  const { data: habits, isLoading, error, refetch } = useHabits();
   const queryClient = useQueryClient();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: [api.habits.list.path] });
-  };
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    // Recalculate window state
+    setRefreshKey(prev => prev + 1);
+    // Refresh API data
+    await queryClient.invalidateQueries({ queryKey: [api.habits.list.path] });
+    await refetch();
+    setIsRefreshing(false);
+  }, [queryClient, refetch]);
+
+  // Tab focus detection - refresh on return
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleRefresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [handleRefresh]);
+
+  // Auto-refresh every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshKey(prev => prev + 1);
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   if (isLoading) {
     return (
@@ -62,8 +96,14 @@ export default function Dashboard() {
                 {format(today, "MMMM d, yyyy")}
               </p>
             </div>
-            <Button variant="ghost" size="icon" onClick={handleRefresh} data-testid="button-refresh">
-              <RefreshCw className="w-4 h-4" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleRefresh} 
+              disabled={isRefreshing}
+              data-testid="button-refresh"
+            >
+              <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
             </Button>
           </div>
         </div>
@@ -71,7 +111,7 @@ export default function Dashboard() {
         {/* Top Cards: Streaks + Day Confirmation */}
         <div className="grid gap-4 md:grid-cols-2">
           <StreakCard habits={habits || []} />
-          <DayConfirmationCard />
+          <DayConfirmationCard key={refreshKey} />
         </div>
 
         {/* Avoidance Section */}
@@ -86,7 +126,7 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {avoidanceHabits.length > 0 ? (
               avoidanceHabits.map(habit => (
-                <HabitCard key={habit.id} habit={habit} />
+                <HabitCard key={`${habit.id}-${refreshKey}`} habit={habit} />
               ))
             ) : (
               <EmptyState type="avoidance" />
@@ -106,7 +146,7 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {buildHabits.length > 0 ? (
               buildHabits.map(habit => (
-                <HabitCard key={habit.id} habit={habit} />
+                <HabitCard key={`${habit.id}-${refreshKey}`} habit={habit} />
               ))
             ) : (
               <EmptyState type="build" />

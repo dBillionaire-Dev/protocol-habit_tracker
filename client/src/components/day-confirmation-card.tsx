@@ -1,23 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Clock, Timer } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function useConfirmationWindow() {
-  const [state, setState] = useState(() => calculateWindowState());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setState(calculateWindowState());
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return state;
+interface WindowState {
+  isWindowOpen: boolean;
+  timeUntilWindow: { hours: number; minutes: number; seconds: number } | null;
+  timeRemaining: { hours: number; minutes: number; seconds: number } | null;
+  lastCalculated: number;
 }
 
-function calculateWindowState() {
+function calculateWindowState(): WindowState {
   const now = new Date();
   const hours = now.getHours();
   const minutes = now.getMinutes();
@@ -30,7 +23,6 @@ function calculateWindowState() {
   let timeRemaining: { hours: number; minutes: number; seconds: number } | null = null;
 
   if (isWindowOpen) {
-    // Calculate time remaining in window
     const remainingMinutes = 59 - minutes;
     const remainingSeconds = 59 - seconds;
     timeRemaining = {
@@ -39,7 +31,6 @@ function calculateWindowState() {
       seconds: remainingSeconds,
     };
   } else {
-    // Calculate time until window opens (11 PM)
     let hoursUntil = 23 - hours;
     let minutesUntil = 60 - minutes;
     let secondsUntil = 60 - seconds;
@@ -70,18 +61,61 @@ function calculateWindowState() {
     isWindowOpen,
     timeUntilWindow,
     timeRemaining,
+    lastCalculated: Date.now(),
   };
 }
 
-export function DayConfirmationCard() {
-  const { isWindowOpen, timeUntilWindow, timeRemaining } = useConfirmationWindow();
+export function useConfirmationWindow() {
+  const [state, setState] = useState<WindowState>(() => calculateWindowState());
+
+  const refresh = useCallback(() => {
+    setState(calculateWindowState());
+  }, []);
+
+  useEffect(() => {
+    // Update every 60 seconds for efficiency
+    const interval = setInterval(() => {
+      setState(calculateWindowState());
+    }, 60000);
+
+    // Also update on tab focus return
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setState(calculateWindowState());
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  return { ...state, refresh };
+}
+
+interface DayConfirmationCardProps {
+  onRefresh?: () => void;
+}
+
+export function DayConfirmationCard({ onRefresh }: DayConfirmationCardProps) {
+  const { isWindowOpen, timeUntilWindow, timeRemaining, refresh } = useConfirmationWindow();
+
+  // Expose refresh to parent if needed
+  useEffect(() => {
+    if (onRefresh) {
+      onRefresh();
+    }
+  }, []);
 
   const formatTime = (time: { hours: number; minutes: number; seconds?: number } | null) => {
     if (!time) return "--:--";
     if (time.hours > 0) {
       return `${time.hours}h ${time.minutes}m`;
     }
-    return `${time.minutes}m ${time.seconds || 0}s`;
+    return `${time.minutes}m`;
   };
 
   return (
@@ -116,14 +150,14 @@ export function DayConfirmationCard() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
-                <span className="text-emerald-500 font-mono font-bold text-lg">
+                <span className="text-emerald-500 font-mono font-bold text-lg" data-testid="text-window-remaining">
                   {formatTime(timeRemaining)}
                 </span>
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <Timer className="w-4 h-4 text-muted-foreground" />
-                <span className="text-orange-500 font-mono font-bold text-lg">
+                <span className="text-orange-500 font-mono font-bold text-lg" data-testid="text-window-countdown">
                   In {formatTime(timeUntilWindow)}
                 </span>
               </div>
@@ -134,3 +168,6 @@ export function DayConfirmationCard() {
     </Card>
   );
 }
+
+// Export the refresh function for external use
+export { calculateWindowState };

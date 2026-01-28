@@ -259,23 +259,49 @@ export class DatabaseStorage implements IStorage {
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       
       let newStreak = 1;
+      let currentStreakStart = date; // Default: streak starts today
+      
       if (habit.lastStreakDate === yesterdayStr) {
+        // Continuing streak
         newStreak = habit.currentStreak + 1;
+        currentStreakStart = habit.currentStreakStart || date;
       }
       
+      const isNewLongest = newStreak > habit.longestStreak;
       const newLongest = Math.max(habit.longestStreak, newStreak);
       
+      const updateData: any = { 
+        currentStreak: newStreak, 
+        longestStreak: newLongest,
+        lastStreakDate: date,
+        currentStreakStart,
+      };
+      
+      // Update longest streak dates if this is a new record
+      if (isNewLongest) {
+        updateData.longestStreakStart = currentStreakStart;
+        updateData.longestStreakEnd = null; // Still active
+      }
+      
       await db.update(habits)
-        .set({ 
-          currentStreak: newStreak, 
-          longestStreak: newLongest,
-          lastStreakDate: date
-        })
+        .set(updateData)
         .where(eq(habits.id, habitId));
     } else {
-      await db.update(habits)
-        .set({ currentStreak: 0 })
-        .where(eq(habits.id, habitId));
+      // Streak broken - record the end date of longest if it was the current streak
+      const habit = await this.getHabit(habitId);
+      if (habit && habit.currentStreak === habit.longestStreak && habit.currentStreak > 0) {
+        await db.update(habits)
+          .set({ 
+            currentStreak: 0,
+            currentStreakStart: null,
+            longestStreakEnd: habit.lastStreakDate // Record when it ended
+          })
+          .where(eq(habits.id, habitId));
+      } else {
+        await db.update(habits)
+          .set({ currentStreak: 0, currentStreakStart: null })
+          .where(eq(habits.id, habitId));
+      }
     }
   }
 }

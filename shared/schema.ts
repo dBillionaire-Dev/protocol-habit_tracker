@@ -22,6 +22,9 @@ export const habits = pgTable("habits", {
   currentStreak: integer("current_streak").default(0).notNull(),
   longestStreak: integer("longest_streak").default(0).notNull(),
   lastStreakDate: date("last_streak_date"), // Last date that contributed to streak
+  currentStreakStart: date("current_streak_start"), // When current streak began
+  longestStreakStart: date("longest_streak_start"), // When longest streak began
+  longestStreakEnd: date("longest_streak_end"), // When longest streak ended (if broken)
 });
 
 export const habitEvents = pgTable("habit_events", {
@@ -58,6 +61,9 @@ export const insertHabitSchema = createInsertSchema(habits).omit({
   currentStreak: true,
   longestStreak: true,
   lastStreakDate: true,
+  currentStreakStart: true,
+  longestStreakStart: true,
+  longestStreakEnd: true,
 }).extend({
   type: z.enum(HABIT_TYPES),
   baseTaskValue: z.number().optional(),

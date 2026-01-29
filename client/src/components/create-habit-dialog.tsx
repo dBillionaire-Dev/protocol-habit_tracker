@@ -67,7 +67,7 @@ export function CreateHabitDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <button 
-          className="w-full flex-1 border border-dashed border-border rounded-lg p-6 text-center hover-elevate transition-all cursor-pointer flex items-center justify-center gap-2 bg-white text-black dark:bg-white dark:text-black"
+          className="w-full border border-dashed border-border rounded-lg p-4 text-center hover-elevate transition-all cursor-pointer flex items-center justify-center gap-2 bg-white text-black dark:bg-white dark:text-black"
           data-testid="button-new-habit"
         >
           <Plus className="w-4 h-4" />

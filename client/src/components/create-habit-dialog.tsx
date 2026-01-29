@@ -66,10 +66,13 @@ export function CreateHabitDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="w-full sm:w-auto shadow-lg shadow-primary/10">
-          <Plus className="w-4 h-4 mr-2" />
-          Initialize Protocol
-        </Button>
+        <button 
+          className="w-full border border-dashed border-border rounded-lg p-6 text-center hover-elevate transition-all cursor-pointer flex items-center justify-center gap-2 text-muted-foreground hover:text-foreground"
+          data-testid="button-new-habit"
+        >
+          <Plus className="w-4 h-4" />
+          <span className="font-medium">New Habit</span>
+        </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>

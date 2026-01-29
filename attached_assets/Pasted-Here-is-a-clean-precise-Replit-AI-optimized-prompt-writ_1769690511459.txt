@@ -1,0 +1,111 @@
+Here is a **clean, precise, Replit-AI–optimized prompt**, written so the AI focuses on **implementation only**, keeps your **existing styles**, and follows the **image exactly**.
+
+You can copy-paste this directly into **Replit AI**.
+
+---
+
+## Replit AI Prompt
+
+Use the attached UI screenshot as the **exact reference**.
+**Do not change colors, spacing, fonts, shadows, or component styles.**
+Only implement layout and logic changes using existing UI patterns.
+
+---
+
+### 1. Streak Card Layout (Side-by-Side)
+
+Update the **Streak card** so that its contents are displayed **side by side**, not stacked vertically.
+
+Specifically:
+
+* Current Streak and Longest Streak should appear **horizontally next to each other**
+* Match the visual layout shown in the reference image
+* Do not introduce new components or styling
+* Only adjust layout structure (flex/grid)
+
+---
+
+### 2. Show Habit Streak on Each Habit Card
+
+Each individual **habit card** must display its own streak, exactly as shown in the image.
+
+For every habit card:
+
+* Display:
+
+  * 🔥 X day streak (or similar existing indicator)
+* The streak must be:
+
+  * Habit-specific
+  * Calculated independently per habit
+* Avoidance habits:
+
+  * Count streak based on days the habit was not logged
+* Streak should update without affecting other habits
+
+Do not duplicate logic unnecessarily. Reuse the existing streak calculation.
+
+---
+
+### 3. Move “Initialize Protocol” Button
+
+Relocate the **Initialize Protocol** button:
+
+* Move it **below the Day Confirmation card**
+* Button width must:
+
+  * Not be larger than the Day Confirmation card
+  * Align naturally with the card layout
+* Keep the same button style and behavior
+* Only change placement, not appearance
+
+---
+
+### 4. Authentication Improvements
+
+Extend the existing authentication system to support:
+
+#### Email Authentication
+
+* Sign up with email and password
+* Sign in with email and password
+
+#### Google Authentication
+
+* Sign up with Google
+* Sign in with Google
+
+Requirements:
+
+* Use Supabase Authentication
+* Persist user sessions
+* Ensure habits and streaks are tied to authenticated users
+* Do not change existing auth UI styling
+* Add new auth options using current button patterns
+
+---
+
+### 5. General Constraints
+
+* Do not redesign anything
+* Do not introduce new colors or typography
+* Keep PWA behavior intact
+* Maintain existing state and data flow
+* Implement only what is described above
+
+---
+
+### Goal
+
+Match the behavior and layout shown in the reference image **exactly**, while keeping the app visually unchanged.
+
+---
+
+If you want, next I can:
+
+* Break this into **Replit AI step-by-step tasks**
+* Write **exact Supabase auth config**
+* Provide **streak calculation logic** optimized for avoidance habits
+* Help you refactor streak logic into a reusable hook
+
+Just tell me.

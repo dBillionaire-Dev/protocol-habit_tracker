@@ -51,9 +51,11 @@ export function HabitCard({ habit }: HabitCardProps) {
           habit.debt && habit.debt > 0 ? "border-destructive/30" : "border-border"
         )}>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 gap-2">
-            <div>
-              <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
-              <p className="text-xs text-muted-foreground">Avoidance</p>
+            <div className="flex items-center gap-2">
+              <div>
+                <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
+                <p className="text-xs text-muted-foreground">Avoidance</p>
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <span className={cn(
@@ -65,7 +67,15 @@ export function HabitCard({ habit }: HabitCardProps) {
               <span className="text-xs text-muted-foreground">debt</span>
             </div>
           </CardHeader>
-          <CardContent className="pb-3">
+          <CardContent className="pb-3 space-y-3">
+            {/* Streak display for avoidance habits */}
+            {habit.currentStreak && habit.currentStreak > 0 ? (
+              <div className="flex items-center gap-1.5 text-orange-500">
+                <Flame className="w-4 h-4" />
+                <span className="text-sm font-medium">{habit.currentStreak} day streak</span>
+              </div>
+            ) : null}
+            
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Today</p>

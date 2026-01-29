@@ -108,10 +108,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Top Cards: Streaks + Day Confirmation */}
+        {/* Top Cards: Streaks + Day Confirmation with New Habit Button */}
         <div className="grid gap-4 md:grid-cols-2">
           <StreakCard habits={habits || []} />
-          <DayConfirmationCard key={refreshKey} />
+          <div className="space-y-4">
+            <DayConfirmationCard key={refreshKey} />
+            <CreateHabitDialog />
+          </div>
         </div>
 
         {/* Avoidance Section */}
@@ -154,10 +157,6 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* New Habit Button */}
-        <div className="pt-4">
-          <CreateHabitDialog />
-        </div>
       </div>
     </LayoutShell>
   );

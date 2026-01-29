@@ -98,9 +98,10 @@ export function useConfirmationWindow() {
 
 interface DayConfirmationCardProps {
   onRefresh?: () => void;
+  className?: string;
 }
 
-export function DayConfirmationCard({ onRefresh }: DayConfirmationCardProps) {
+export function DayConfirmationCard({ onRefresh, className }: DayConfirmationCardProps) {
   const { isWindowOpen, timeUntilWindow, timeRemaining, refresh } = useConfirmationWindow();
 
   // Expose refresh to parent if needed
@@ -123,7 +124,8 @@ export function DayConfirmationCard({ onRefresh }: DayConfirmationCardProps) {
       "transition-all",
       isWindowOpen 
         ? "border-emerald-500/50 bg-emerald-500/5" 
-        : "border-muted"
+        : "border-muted",
+      className
     )}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">

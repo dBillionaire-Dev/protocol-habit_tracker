@@ -111,8 +111,8 @@ export default function Dashboard() {
         {/* Top Cards: Streaks + Day Confirmation with New Habit Button */}
         <div className="grid gap-4 md:grid-cols-2">
           <StreakCard habits={habits || []} />
-          <div className="space-y-4">
-            <DayConfirmationCard key={refreshKey} />
+          <div className="flex flex-col gap-4 h-full">
+            <DayConfirmationCard key={refreshKey} className="flex-1" />
             <CreateHabitDialog />
           </div>
         </div>

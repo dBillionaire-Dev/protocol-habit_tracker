@@ -94,7 +94,9 @@ export type CompleteDailyTaskRequest = { date: string, completed: boolean };
 export type HabitWithStatus = Habit & {
   debt?: number; // For avoidance
   todayEvents?: number; // For avoidance - events logged today
+  todayConfirmed?: boolean; // For avoidance - clean day confirmed today
   todayTask?: number; // For build - required task amount
   todayCompleted?: boolean; // For build
+  todayMissed?: boolean; // For build - marked as missed
   penaltyLevel?: number; // For build
 };

@@ -65,9 +65,10 @@ export class DatabaseStorage implements IStorage {
       const h: HabitWithStatus = { ...habit };
       
       if (habit.type === 'avoidance') {
-        const debt = await db.select().from(habitDebts).where(eq(habitDebts.habitId, habit.id));
-        h.debt = debt[0]?.debtCount ?? 0;
+        const [debt] = await db.select().from(habitDebts).where(eq(habitDebts.habitId, habit.id));
+        h.debt = debt?.debtCount ?? 0;
         h.todayEvents = await this.getTodayEventCount(habit.id, today);
+        h.todayConfirmed = debt?.lastCleanDate === today;
       } else {
         // Build habit logic
         const penalty = await this.calculatePenaltyLevel(habit.id, today);
@@ -76,6 +77,8 @@ export class DatabaseStorage implements IStorage {
         
         const status = await this.getDailyStatus(habit.id, today);
         h.todayCompleted = status?.completed ?? false;
+        // Check if marked as missed (has status record but not completed)
+        h.todayMissed = status ? !status.completed : false;
       }
       results.push(h);
     }

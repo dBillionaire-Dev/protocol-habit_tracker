@@ -136,3 +136,24 @@ export function useCompleteDaily() {
     },
   });
 }
+
+// Mark as Missed (Build: Failed to complete)
+export function useMarkMissed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, date }: { id: number; date: string }) => {
+      const url = buildUrl(api.habits.completeDaily.path, { id });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, completed: false }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to mark as missed");
+      return api.habits.completeDaily.responses[200].parse(await res.json());
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.habits.list.path] });
+    },
+  });
+}

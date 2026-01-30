@@ -1,10 +1,10 @@
 import { type HabitWithStatus } from "@shared/schema";
-import { useLogHabitEvent, useConfirmCleanDay, useCompleteDaily, useDeleteHabit } from "@/hooks/use-habits";
+import { useLogHabitEvent, useConfirmCleanDay, useCompleteDaily, useDeleteHabit, useMarkMissed } from "@/hooks/use-habits";
 import { useConfirmationWindow } from "@/components/day-confirmation-card";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Check, Plus, Trash2, AlertTriangle, ShieldCheck, Flame } from "lucide-react";
+import { Check, Plus, Trash2, X, Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ export function HabitCard({ habit }: HabitCardProps) {
   const logEventMutation = useLogHabitEvent();
   const confirmCleanMutation = useConfirmCleanDay();
   const completeMutation = useCompleteDaily();
+  const missedMutation = useMarkMissed();
   const { isWindowOpen } = useConfirmationWindow();
 
   const today = format(new Date(), "yyyy-MM-dd");
@@ -39,6 +40,7 @@ export function HabitCard({ habit }: HabitCardProps) {
   if (habit.type === "avoidance") {
     const todayEvents = habit.todayEvents || 0;
     const isClean = todayEvents === 0;
+    const isConfirmed = habit.todayConfirmed;
 
     return (
       <motion.div
@@ -56,6 +58,7 @@ export function HabitCard({ habit }: HabitCardProps) {
                 <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
                 <p className="text-xs text-muted-foreground">Avoidance</p>
               </div>
+              <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
             </div>
             <div className="flex items-center gap-1">
               <span className={cn(
@@ -86,7 +89,7 @@ export function HabitCard({ habit }: HabitCardProps) {
                 )}
               </div>
               
-              {/* Log Event Button (+) */}
+              {/* Log Event Button (+) - always visible */}
               <Button 
                 variant="outline" 
                 size="sm"
@@ -100,22 +103,30 @@ export function HabitCard({ habit }: HabitCardProps) {
               </Button>
             </div>
           </CardContent>
-          <CardFooter className="flex gap-2 pt-0">
-            <Button 
-              className={cn(
-                "flex-1",
-                isWindowOpen 
-                  ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              )}
-              onClick={() => confirmCleanMutation.mutate({ id: habit.id, date: today })}
-              disabled={!isWindowOpen || confirmCleanMutation.isPending || !isClean}
-              data-testid={`button-clean-${habit.id}`}
-            >
-              <Check className="w-4 h-4 mr-2" />
-              {isWindowOpen ? (isClean ? "Confirm Clean" : "Has Events") : "Window Closed"}
-            </Button>
-            <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
+          <CardFooter className="pt-0">
+            {isConfirmed ? (
+              <Button 
+                className="flex-1 bg-emerald-600 hover:bg-emerald-600 text-white cursor-default"
+                disabled
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Clean day confirmed
+              </Button>
+            ) : (
+              <Button 
+                className={cn(
+                  "flex-1",
+                  isWindowOpen && isClean
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                )}
+                onClick={() => confirmCleanMutation.mutate({ id: habit.id, date: today })}
+                disabled={!isWindowOpen || confirmCleanMutation.isPending || !isClean}
+                data-testid={`button-clean-${habit.id}`}
+              >
+                {isWindowOpen ? (isClean ? "Confirm Clean Day" : "Has Events Today") : "Window Closed"}
+              </Button>
+            )}
           </CardFooter>
         </Card>
       </motion.div>
@@ -133,23 +144,25 @@ export function HabitCard({ habit }: HabitCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className={cn(
-        "transition-all",
-        habit.todayCompleted && "opacity-80"
-      )}>
+      <Card className="transition-all">
         <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0 gap-2">
-          <div>
-            <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
-            <p className="text-xs text-muted-foreground">Build</p>
+          <div className="flex items-center gap-2">
+            <div>
+              <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
+              <p className="text-xs text-muted-foreground">Build</p>
+            </div>
+            <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
           </div>
+        </CardHeader>
+        <CardContent className="pb-3 space-y-2">
+          {/* Streak display */}
           {habit.currentStreak && habit.currentStreak > 0 ? (
-            <div className="flex items-center gap-1 text-orange-500">
+            <div className="flex items-center gap-1.5 text-orange-500">
               <Flame className="w-4 h-4" />
-              <span className="text-sm font-mono font-bold">{habit.currentStreak}</span>
+              <span className="text-sm font-medium">{habit.currentStreak} day streak</span>
             </div>
           ) : null}
-        </CardHeader>
-        <CardContent className="pb-3">
+
           <div>
             <p className="text-xs text-muted-foreground mb-1">Today's requirement</p>
             <div className="flex items-baseline gap-2">
@@ -166,32 +179,53 @@ export function HabitCard({ habit }: HabitCardProps) {
             )}
           </div>
         </CardContent>
-        <CardFooter className="flex gap-2 pt-0">
+        <CardFooter className="pt-0">
           {habit.todayCompleted ? (
             <Button 
-              variant="secondary" 
-              className="flex-1 cursor-default bg-primary/10 text-primary hover:bg-primary/10"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-600 text-white cursor-default"
               disabled
             >
               <Check className="w-4 h-4 mr-2" />
               Completed
             </Button>
+          ) : habit.todayMissed ? (
+            <Button 
+              variant="destructive"
+              className="flex-1 bg-destructive/20 hover:bg-destructive/20 text-destructive cursor-default border border-destructive/30"
+              disabled
+            >
+              Missed - penalty stacks tomorrow
+            </Button>
+          ) : isWindowOpen ? (
+            <div className="flex gap-2 w-full">
+              <Button 
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => completeMutation.mutate({ id: habit.id, date: today, completed: true })}
+                disabled={completeMutation.isPending}
+                data-testid={`button-complete-${habit.id}`}
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Done
+              </Button>
+              <Button 
+                variant="outline"
+                className="flex-1 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                onClick={() => missedMutation.mutate({ id: habit.id, date: today })}
+                disabled={missedMutation.isPending}
+                data-testid={`button-missed-${habit.id}`}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Missed
+              </Button>
+            </div>
           ) : (
             <Button 
-              className={cn(
-                "flex-1",
-                isWindowOpen 
-                  ? "" 
-                  : "bg-muted text-muted-foreground cursor-not-allowed"
-              )}
-              onClick={() => completeMutation.mutate({ id: habit.id, date: today, completed: true })}
-              disabled={!isWindowOpen || completeMutation.isPending}
-              data-testid={`button-complete-${habit.id}`}
+              className="flex-1 bg-muted text-muted-foreground cursor-not-allowed"
+              disabled
             >
-              {isWindowOpen ? "Execute Protocol" : "Window Closed"}
+              Window Closed
             </Button>
           )}
-          <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
         </CardFooter>
       </Card>
     </motion.div>
@@ -202,8 +236,8 @@ function DeleteButton({ onDelete, isDeleting }: { onDelete: () => void, isDeleti
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" data-testid="button-delete-habit">
-          <Trash2 className="w-4 h-4" />
+        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" data-testid="button-delete-habit">
+          <Trash2 className="w-3 h-3" />
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>

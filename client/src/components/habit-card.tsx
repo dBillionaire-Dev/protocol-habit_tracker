@@ -181,20 +181,14 @@ export function HabitCard({ habit }: HabitCardProps) {
         </CardContent>
         <CardFooter className="pt-0">
           {habit.todayCompleted ? (
-            <Button 
-              className="flex-1 bg-emerald-600 hover:bg-emerald-600 text-white cursor-default"
-              disabled
-            >
-              <Check className="w-4 h-4 mr-2" />
+            <div className="flex-1 bg-emerald-600 text-white rounded-md py-2 px-4 text-center font-medium flex items-center justify-center gap-2">
+              <Check className="w-4 h-4" />
               Completed
-            </Button>
+            </div>
           ) : habit.todayMissed ? (
-            <Button 
-              className="flex-1 bg-red-900/40 hover:bg-red-900/40 text-red-400 cursor-default border-0"
-              disabled
-            >
+            <div className="flex-1 bg-red-900/40 text-red-400 rounded-md py-2 px-4 text-center font-medium">
               Missed - penalty stacks tomorrow
-            </Button>
+            </div>
           ) : isWindowOpen ? (
             <div className="flex gap-2 w-full">
               <Button 
@@ -203,27 +197,21 @@ export function HabitCard({ habit }: HabitCardProps) {
                 disabled={completeMutation.isPending}
                 data-testid={`button-complete-${habit.id}`}
               >
-                <Check className="w-4 h-4 mr-2" />
-                Done
+                Execute Protocol
               </Button>
               <Button 
-                variant="outline"
-                className="flex-1 border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                 onClick={() => missedMutation.mutate({ id: habit.id, date: today })}
                 disabled={missedMutation.isPending}
                 data-testid={`button-missed-${habit.id}`}
               >
-                <X className="w-4 h-4 mr-2" />
-                Missed
+                Missed Protocol
               </Button>
             </div>
           ) : (
-            <Button 
-              className="flex-1 bg-muted text-muted-foreground cursor-not-allowed"
-              disabled
-            >
+            <div className="flex-1 bg-muted text-muted-foreground rounded-md py-2 px-4 text-center font-medium">
               Window Closed
-            </Button>
+            </div>
           )}
         </CardFooter>
       </Card>

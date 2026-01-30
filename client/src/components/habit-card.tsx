@@ -190,8 +190,7 @@ export function HabitCard({ habit }: HabitCardProps) {
             </Button>
           ) : habit.todayMissed ? (
             <Button 
-              variant="destructive"
-              className="flex-1 bg-destructive/20 hover:bg-destructive/20 text-destructive cursor-default border border-destructive/30"
+              className="flex-1 bg-red-900/40 hover:bg-red-900/40 text-red-400 cursor-default border-0"
               disabled
             >
               Missed - penalty stacks tomorrow

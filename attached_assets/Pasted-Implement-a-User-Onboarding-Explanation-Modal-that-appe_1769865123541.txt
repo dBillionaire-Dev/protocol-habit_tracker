@@ -1,0 +1,167 @@
+Implement a **User Onboarding / Explanation Modal** that appears on login and explains how the app works.
+This is **not a Terms & Conditions**, but a **clear behavioral guide** for first-time and returning users.
+
+**Do not change existing visual styles.**
+Reuse existing modal, card, button, and typography components.
+
+---
+
+### 1. When the Modal Appears
+
+* Show this modal:
+
+  * On **first login**
+  * On subsequent logins **unless the user disables it**
+* The modal must appear **after authentication**, not before
+
+---
+
+### 2. “Don’t Show Again” Logic
+
+* Include a checkbox or toggle:
+
+  * Label: **“Don’t show this again”**
+* When enabled:
+
+  * Store the preference persistently (Supabase user metadata or user settings table)
+  * The modal must **never appear again** unless manually reset
+* Default state:
+
+  * Unchecked (modal shows)
+
+---
+
+### 3. Modal Content (Exact Explanation Text)
+
+Display the following content clearly, using sections or cards (no new styling).
+
+---
+
+#### Welcome
+
+**Welcome to the Habit Protocol System**
+
+This app is built to enforce discipline, not just track habits.
+Everything works on **protocols, streaks, debt, and daily confirmation windows**.
+
+---
+
+#### Habit Types
+
+**There are two types of habits:**
+
+**1. Building Habits**
+These are habits you must actively do.
+Examples: studying, coding, exercising.
+
+* You must execute the habit’s protocol within its time window
+* Executing a protocol:
+
+  * Increases your streak
+  * Reduces any existing debt
+* Missing a protocol:
+
+  * Breaks the streak
+  * Increases debt
+
+---
+
+**2. Avoidance Habits**
+These are habits you must avoid completely.
+Examples: no junk food, no gambling, no porn.
+
+* You do not log actions for these habits
+* If you avoid the habit for the entire day:
+
+  * The day is confirmed as a **Clean Day**
+  * Your streak increases
+* If you perform the habit:
+
+  * The streak breaks immediately
+  * Debt increases
+
+---
+
+#### Day Confirmation Window
+
+Every day has a **confirmation window**.
+
+* When the window is open:
+
+  * You will see “Window Open” with a countdown timer
+* During this time:
+
+  * Building habits are confirmed as completed
+  * Avoidance habits are confirmed as clean days
+
+Missing the confirmation window may affect your streak and debt.
+
+---
+
+#### Streak System
+
+* Each habit has its **own streak**
+* Streaks are:
+
+  * Habit-specific
+  * Independent of other habits
+* Longest streaks:
+
+  * Are stored permanently
+  * Do not reset when you break a streak
+
+---
+
+#### Debt System
+
+Debt represents missed responsibility.
+
+* Debt increases when:
+
+  * A protocol is missed
+  * An avoidance habit is violated
+* Debt decreases when:
+
+  * Protocols are executed
+  * Clean days are confirmed
+
+Debt is tracked **per habit**, not globally.
+
+---
+
+#### Final Note
+
+This app rewards **consistency**, not perfection.
+The goal is accountability, awareness, and long-term discipline.
+
+---
+
+### 4. Modal Actions
+
+At the bottom of the modal:
+
+* **Primary button:** “I Understand” (closes modal)
+* Optional secondary action:
+
+  * “Don’t show again” checkbox (if not already shown inline)
+
+---
+
+### 5. Technical Constraints
+
+* Do not redesign or restyle anything
+* Do not block the app after dismissal
+* Ensure preference persists across sessions and devices
+* Keep implementation minimal and clean
+
+---
+
+### Goal
+
+Ensure every user clearly understands:
+
+* How building habits work
+* How avoidance habits work
+* How streaks, debt, and confirmation windows function
+
+Without forcing them to read legal terms.

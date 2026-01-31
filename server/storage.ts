@@ -11,6 +11,7 @@ export interface IStorage {
   // Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUserPreferences(userId: string, prefs: { showOnboarding?: string }): Promise<void>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -52,6 +53,15 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async updateUserPreferences(userId: string, prefs: { showOnboarding?: string }): Promise<void> {
+    await db.update(users)
+      .set({ 
+        showOnboarding: prefs.showOnboarding,
+        updatedAt: new Date() 
+      })
+      .where(eq(users.id, userId));
   }
 
   // Habit Implementation

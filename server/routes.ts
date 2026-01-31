@@ -51,21 +51,44 @@ export async function registerRoutes(
   };
 
   // Modified auth/user endpoint to support guest
-  app.get("/api/auth/user", (req: any, res) => {
+  app.get("/api/auth/user", async (req: any, res) => {
     if (req.session?.guestUser) {
       return res.json({
         id: GUEST_USER_ID,
         email: "guest@demo.app",
         firstName: "Guest",
         lastName: "User",
-        profileImageUrl: null
+        profileImageUrl: null,
+        showOnboarding: req.session.guestShowOnboarding !== false ? "true" : "false"
       });
     }
     // Fall through to normal auth check
     if (!req.isAuthenticated?.()) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    res.json(req.user?.claims || {});
+    // Get user from database to include showOnboarding
+    const user = await storage.getUser(req.user.claims.sub);
+    res.json({
+      ...req.user.claims,
+      showOnboarding: user?.showOnboarding ?? "true"
+    });
+  });
+
+  // Update user preferences (onboarding)
+  app.post("/api/user/preferences", requireUser, async (req: any, res) => {
+    try {
+      const { showOnboarding } = req.body;
+      if (req.userId === GUEST_USER_ID) {
+        // Store in session for guest users
+        req.session.guestShowOnboarding = showOnboarding !== "false";
+        return res.json({ showOnboarding: showOnboarding });
+      }
+      await storage.updateUserPreferences(req.userId, { showOnboarding });
+      res.json({ showOnboarding });
+    } catch (err) {
+      console.error("Update preferences error:", err);
+      res.status(500).json({ message: "Failed to update preferences" });
+    }
   });
 
   // Habits Routes

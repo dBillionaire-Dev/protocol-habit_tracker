@@ -5,11 +5,12 @@ import { HabitCard } from "@/components/habit-card";
 import { CreateHabitDialog } from "@/components/create-habit-dialog";
 import { DayConfirmationCard, calculateWindowState } from "@/components/day-confirmation-card";
 import { StreakCard } from "@/components/streak-card";
+import { OnboardingModal } from "@/components/onboarding-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Calendar, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,48 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Fetch user to check onboarding preference
+  const { data: user } = useQuery({
+    queryKey: ["/api/auth/user"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/user", { credentials: "include" });
+      if (!res.ok) return null;
+      return res.json();
+    },
+  });
+
+  // Mutation to update onboarding preference
+  const updatePrefs = useMutation({
+    mutationFn: async (showOnboarding: string) => {
+      const res = await fetch("/api/user/preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showOnboarding }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update preferences");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    },
+  });
+
+  // Show onboarding modal based on user preference
+  useEffect(() => {
+    if (user && user.showOnboarding === "true") {
+      setShowOnboarding(true);
+    }
+  }, [user]);
+
+  const handleCloseOnboarding = (dontShowAgain: boolean) => {
+    setShowOnboarding(false);
+    if (dontShowAgain) {
+      updatePrefs.mutate("false");
+    }
+  };
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -79,6 +122,7 @@ export default function Dashboard() {
 
   return (
     <LayoutShell>
+      <OnboardingModal open={showOnboarding} onClose={handleCloseOnboarding} />
       <div className="space-y-6">
         {/* Header with Date */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

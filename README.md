@@ -80,38 +80,38 @@ pnpm dev
 
 ### Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REPLIT_CLIENT_ID` | Replit OAuth client ID (optional) |
-| `REPLIT_CLIENT_SECRET` | Replit OAuth client secret (optional) |
-| `SESSION_SECRET` | Session encryption secret |
+| Variable               | Description                           |
+|------------------------|---------------------------------------|
+| `DATABASE_URL`         | PostgreSQL connection string          |
+| `GOOGLE_CLIENT_ID`     | Google OAuth client ID (optional)     |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret (optional) |
+| `SESSION_SECRET`       | Session encryption secret             |
 
 ## Project Structure
 
 ```
 nextjs/
 ├── src/
-│   ├── app/                    # Next.js App Router pages
-│   │   ├── api/               # API routes
-│   │   │   ├── auth/         # Authentication endpoints
-│   │   │   ├── habits/       # Habits CRUD endpoints
-│   │   │   └── user/         # User preferences
-│   │   ├── dashboard/        # Protected dashboard page
-│   │   ├── globals.css       # Global styles
-│   │   ├── layout.tsx        # Root layout
-│   │   └── page.tsx          # Landing page
+│   ├── app/                 # Next.js App Router pages
+│   │   ├── api/             # API routes
+│   │   │   ├── auth/        # Authentication endpoints
+│   │   │   ├── habits/      # Habits CRUD endpoints
+│   │   │   └── user/        # User preferences
+│   │   ├── dashboard/       # Protected dashboard page
+│   │   ├── globals.css      # Global styles
+│   │   ├── layout.tsx       # Root layout
+│   │   └── page.tsx         # Landing page
 │   ├── components/
 │   │   ├── ui/              # Reusable UI components
 │   │   ├── habit-card.tsx   # Habit display card
 │   │   ├── layout-shell.tsx # Dashboard layout
 │   │   └── ...
-│   ├── hooks/                # Custom React hooks
-│   ├── lib/                  # Utility functions
-│   └── types/                # TypeScript types
-├── drizzle.config.ts          # Drizzle ORM config
-├── tailwind.config.ts        # Tailwind CSS config
-└── tsconfig.json             # TypeScript config
+│   ├── hooks/               # Custom React hooks
+│   ├── lib/                 # Utility functions
+│   └── types/               # TypeScript types
+├── drizzle.config.ts        # Drizzle ORM config
+├── tailwind.config.ts       # Tailwind CSS config
+└── tsconfig.json            # TypeScript config
 ```
 
 ## Key Implementation

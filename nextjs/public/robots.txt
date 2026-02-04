@@ -1,0 +1,11 @@
+# Robots.txt for Protocol
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://protocol.vercel.app/sitemap.xml
+
+# Disallow private/admin paths
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /auth/

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#000000"/>
+  
+  <!-- Accent gradient -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Card background -->
+  <rect x="100" y="80" width="1000" height="470" rx="24" fill="#111111" stroke="#333333" stroke-width="2"/>
+  
+  <!-- Logo/icon -->
+  <path d="M600 130c110 0 200 89 200 200 0 90-60 150-140 195a40 40 0 0 1-60-1C470 485 410 425 410 330V230a40 40 0 0 1 40-40c80 0 150-50 200-90a46 46 0 0 1 60 0C650 150 720 200 800 200a40 40 0 0 1 40 40v100c0 0-200 0-240 0" stroke="url(#gradient)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  
+  <!-- Title -->
+  <text x="600" y="380" font-family="system-ui, sans-serif" font-size="64" font-weight="bold" fill="#ffffff" text-anchor="middle">Protocol</text>
+  
+  <!-- Subtitle -->
+  <text x="600" y="440" font-family="system-ui, sans-serif" font-size="32" fill="#9ca3af" text-anchor="middle">Personal Habit Tracker</text>
+  
+  <!-- Decorative elements -->
+  <circle cx="200" cy="200" r="100" fill="url(#gradient)" opacity="0.1"/>
+  <circle cx="1000" cy="430" r="150" fill="url(#gradient)" opacity="0.1"/>
+</svg>

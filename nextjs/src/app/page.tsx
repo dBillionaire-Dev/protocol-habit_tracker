@@ -156,7 +156,7 @@ export default function LandingPage() {
                   />
                 </svg>
               )}
-              Continue with Google
+              Authenticate with Google
             </Button>
 
             {/* Replit Sign In */}
@@ -166,17 +166,8 @@ export default function LandingPage() {
                 Authenticate with Replit
               </a>
             </Button>
-            
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Or</span>
-              </div>
-            </div>
 
-            {/* Email/Password Toggle */}
+                        {/* Email/Password Toggle */}
             <Button 
               variant="outline" 
               className="w-full h-12 text-base"
@@ -297,6 +288,15 @@ export default function LandingPage() {
                 </p>
               </form>
             )}
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or</span>
+              </div>
+            </div>
 
             {/* Guest Mode */}
             <Button 

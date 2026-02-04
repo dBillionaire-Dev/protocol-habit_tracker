@@ -206,7 +206,7 @@ export function HabitCard({ habit }: HabitCardProps) {
                 onClick={() => missedMutation.mutate({ id: habit.id, date: today })}
                 disabled={missedMutation.isPending}
               >
-                Missed Protocol
+                Missed
               </Button>
             </div>
           ) : (

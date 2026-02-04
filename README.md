@@ -1,6 +1,20 @@
-# Protocol - Personal Habit Tracker (Next.js 16)
+# Protocol - Personal Discipline Tracking System (Next.js 16)
 
-A serious framework for tracking habits with debt and penalty systems. Converted from React + Vite to Next.js 16 with TypeScript.
+A serious framework for tracking habits with debt and penalty systems. Built with Next.js 16 and TypeScript.
+
+## Overview
+
+PROTOCOL is a full-stack habit tracking Progressive Web App (PWA) designed for strict personal accountability. The application allows users to define and track two types of habits:
+
+1. **Avoidance Habits** (Debt-based): Track bad habits like smoking, junk food, or social media. Each occurrence adds debt that must be worked off through clean days.
+
+2. **Build Habits** (Penalty-stacking): Track positive habits like exercise or reading. Missing daily tasks increases penalty levels, making subsequent days harder.
+
+The app uses a time-restricted confirmation window (11 PM - 12 AM) for daily habit confirmations, with automatic processing at midnight.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
 
 ## Features
 
@@ -8,7 +22,35 @@ A serious framework for tracking habits with debt and penalty systems. Converted
 - **Build Habits**: Track good habits with penalty stacking
 - **Day Confirmation Window**: 11 PM - 12 AM daily confirmation period
 - **Streak System**: Track current and longest streaks
-- **Dark/Light Theme**: Serious, high-contrast dark theme by default
+- **Dark Theme**: Serious, high-contrast dark theme by default
+
+## System Architecture
+
+### Frontend Architecture
+- **Framework**: Next.js 16 with TypeScript
+- **Routing**: Next.js router (File-based routing)
+- **State Management**: TanStack React Query for server state
+- **Styling**: Tailwind CSS with shadcn/ui component library
+- **Animations**: Framer Motion for micro-interactions
+- **Build Tool**: Next.js
+
+### Backend Architecture
+- **Runtime**: Node.js with Express
+- **Language**: TypeScript (ESM modules)
+- **API Pattern**: RESTful JSON API under `/api/*` routes
+- **Session Management**: Express sessions with PostgreSQL store
+
+### Data Storage
+- **Database**: PostgreSQL
+- **ORM**: Drizzle ORM with Zod validation (drizzle-zod)
+- **Schema Location**: `shared/schema.ts` for shared types between client and server
+- **Migrations**: Managed via `drizzle-kit push`
+
+### Authentication
+- **Primary**: Google Auth (OpenID Connect)
+- **Secondary**: Email Auth (Magic Link)
+- **Guest Mode**: Demo user support for testing without authentication
+- **Session Storage**: PostgreSQL-backed sessions via `connect-pg-simple`
 
 ## Getting Started
 
@@ -72,14 +114,7 @@ nextjs/
 └── tsconfig.json             # TypeScript config
 ```
 
-## Key Features Implementation
-
-### Authentication
-
-The app supports both Replit OAuth authentication and guest mode for testing. Authentication is handled via:
-- Server-side sessions
-- Cookie-based auth state
-- Guest mode for demo purposes
+## Key Implementation
 
 ### Habits System
 

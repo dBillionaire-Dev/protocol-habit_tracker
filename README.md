@@ -1,0 +1,139 @@
+# Protocol - Personal Habit Tracker (Next.js 16)
+
+A serious framework for tracking habits with debt and penalty systems. Converted from React + Vite to Next.js 16 with TypeScript.
+
+## Features
+
+- **Avoidance Habits**: Track bad habits with debt accumulation
+- **Build Habits**: Track good habits with penalty stacking
+- **Day Confirmation Window**: 11 PM - 12 AM daily confirmation period
+- **Streak System**: Track current and longest streaks
+- **Dark/Light Theme**: Serious, high-contrast dark theme by default
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL database
+- pnpm (recommended) or npm
+
+### Installation
+
+```bash
+# Install dependencies
+pnpm install
+
+# Copy environment file
+cp .env.example .env
+
+# Update DATABASE_URL in .env with your PostgreSQL connection string
+
+# Run database migrations
+pnpm db:push
+
+# Start development server
+pnpm dev
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REPLIT_CLIENT_ID` | Replit OAuth client ID (optional) |
+| `REPLIT_CLIENT_SECRET` | Replit OAuth client secret (optional) |
+| `SESSION_SECRET` | Session encryption secret |
+
+## Project Structure
+
+```
+nextjs/
+├── src/
+│   ├── app/                    # Next.js App Router pages
+│   │   ├── api/               # API routes
+│   │   │   ├── auth/         # Authentication endpoints
+│   │   │   ├── habits/       # Habits CRUD endpoints
+│   │   │   └── user/         # User preferences
+│   │   ├── dashboard/        # Protected dashboard page
+│   │   ├── globals.css       # Global styles
+│   │   ├── layout.tsx        # Root layout
+│   │   └── page.tsx          # Landing page
+│   ├── components/
+│   │   ├── ui/              # Reusable UI components
+│   │   ├── habit-card.tsx   # Habit display card
+│   │   ├── layout-shell.tsx # Dashboard layout
+│   │   └── ...
+│   ├── hooks/                # Custom React hooks
+│   ├── lib/                  # Utility functions
+│   └── types/                # TypeScript types
+├── drizzle.config.ts          # Drizzle ORM config
+├── tailwind.config.ts        # Tailwind CSS config
+└── tsconfig.json             # TypeScript config
+```
+
+## Key Features Implementation
+
+### Authentication
+
+The app supports both Replit OAuth authentication and guest mode for testing. Authentication is handled via:
+- Server-side sessions
+- Cookie-based auth state
+- Guest mode for demo purposes
+
+### Habits System
+
+#### Avoidance Habits
+- Track bad habits you want to eliminate
+- Each incident increases debt
+- Clean days reduce debt
+- Streaks track consecutive clean days
+
+#### Build Habits
+- Track positive habits you want to build
+- Missed days increase penalty level
+- Penalty increases required task amount
+- Streaks track consecutive successful days
+
+### Day Confirmation Window
+
+The day confirmation window is open from 11:00 PM to 12:00 AM. During this window:
+- Build habits can be marked as complete or missed
+- Avoidance habits can be confirmed as clean days
+- Actions outside this window won't count
+
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start development server |
+| `pnpm build` | Build for production |
+| `pnpm start` | Start production server |
+| `pnpm lint` | Run ESLint |
+| `pnpm db:push` | Push schema changes to database |
+| `pnpm db:studio` | Open Drizzle Studio |
+
+## Tech Stack
+
+- **Framework**: Next.js 16
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Database**: PostgreSQL
+- **ORM**: Drizzle ORM
+- **State Management**: TanStack Query (React Query)
+- **UI Components**: Radix UI primitives
+- **Animations**: Framer Motion
+- **Forms**: React Hook Form + Zod
+
+## Visual Design
+
+The UI maintains 100% visual resemblance to the original design:
+- Dark theme by default with high contrast
+- Minimalist, serious aesthetic
+- Monospace fonts for data display
+- Consistent spacing and typography
+- Responsive design for all screen sizes
+
+## License
+
+MIT

@@ -1,6 +1,59 @@
+# Dependencies
 node_modules
+nextjs/node_modules
+
+# Build output
 dist
+.next
+out
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
 .DS_Store
-server/public
-vite.config.ts.*
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Database
+*.sqlite
+*.db
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Build artifacts
 *.tar.gz
+*.zip
+
+# Misc
+*.pem
+.cache
+
+#Mock Files
+.replit
+replit.md
+attached_assets/
+vite.config.ts

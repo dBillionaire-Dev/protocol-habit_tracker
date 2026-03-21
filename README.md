@@ -1,4 +1,4 @@
-# Protocol - Personal Discipline Tracking System (Next.js 16)
+# Protocol - Personal Discipline Tracking System
 
 A serious framework for tracking habits with debt and penalty systems. Built with Next.js 16 and TypeScript.
 

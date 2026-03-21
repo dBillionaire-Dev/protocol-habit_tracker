@@ -21,8 +21,6 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // For Replit Auth, you would check the session here
-  // This is a placeholder for the authentication logic
   return NextResponse.json(
     { message: "Unauthorized" },
     { status: 401 }

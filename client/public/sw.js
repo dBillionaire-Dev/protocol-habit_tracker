@@ -11,7 +11,11 @@ const API_CACHE = "habit-tracker-api";
 const urlsToCache = [
   "/",
   "/index.html",
+  "/favicon.svg",
   "/manifest.json",
+  "/og-image.png",
+  "/robots.txt",
+  "/sitemap.xml",
 ];
 
 // Install event - cache essential files
@@ -153,7 +157,7 @@ async function getPendingEventsFromDB() {
 }
 
 // Helper to remove synced event
-async function removePendingEventFromDB(id: string) {
+async function removePendingEventFromDB(id) {
   // This would delete from IndexedDB
 }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { User } from "@/types/auth";
 
 interface AuthUser {
   id: string;

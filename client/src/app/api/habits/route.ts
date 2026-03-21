@@ -5,7 +5,6 @@ import { storage } from "@/lib/storage";
 const GUEST_USER_ID = "guest-demo-user";
 
 function getUserId(): string | null {
-  // This is simplified - in production, you'd use proper session handling
   return GUEST_USER_ID;
 }
 

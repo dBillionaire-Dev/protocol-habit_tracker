@@ -66,7 +66,7 @@ export async function handleGoogleCallback(code: string): Promise<GoogleUser | n
 
 export async function verifyGoogleToken(idToken: string): Promise<GoogleUser | null> {
   try {
-    // Decode the JWT token (without verification since we can't use google-auth-library)
+    // Decode the JWT token without verifying the signature (for simplicity)
     const parts = idToken.split(".");
     if (parts.length !== 3) {
       console.error("Invalid Google ID token format");

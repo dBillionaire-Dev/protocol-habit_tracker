@@ -159,13 +159,6 @@ export default function LandingPage() {
               Authenticate with Google
             </Button>
 
-            {/* Replit Sign In */}
-            {/* <Button className="w-full h-12 text-base shadow-lg" asChild>
-              <a href="/api/login">
-                <Lock className="w-4 h-4 mr-2" />
-                Authenticate with Replit
-              </a>
-            </Button> */}
 
             {/* Email/Password Toggle */}
             <Button 

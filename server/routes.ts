@@ -3,7 +3,6 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { createEmailUser, verifyEmailUser, getUserById, getUserByEmail } from "./auth/email-auth";
 import { getGoogleAuthUrl, handleGoogleCallback, createOrGetGoogleUser, verifyGoogleToken } from "./auth/google-auth";
 
@@ -24,13 +23,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Setup Auth (only if Replit credentials are set)
-  if (process.env.REPL_ID && process.env.REPLIT_CLIENT_SECRET) {
-    await setupAuth(app);
-    registerAuthRoutes(app);
-  }
-
-  // ==================== EMAIL/PASSWORD AUTH ====================
+   // EMAIL/PASSWORD AUTH
   
   // Email signup
   app.post("/api/auth/email/signup", async (req, res) => {
@@ -84,7 +77,7 @@ export async function registerRoutes(
     }
   });
 
-  // ==================== GOOGLE OAUTH ====================
+  // GOOGLE OAUTH 
   
   // Google login redirect
   app.get("/api/auth/google", (req, res) => {
@@ -96,15 +89,16 @@ export async function registerRoutes(
   app.get("/api/auth/google/callback", async (req, res) => {
     try {
       const { code } = req.query;
+      const FRONTEND_URL = process.env.APP_URL || "http://localhost:3000";
       
       if (!code || typeof code !== "string") {
-        return res.redirect("/?error=no_code");
+        return res.redirect(`${FRONTEND_URL}/?error=no_code`);
       }
 
       const googleUser = await handleGoogleCallback(code);
       
       if (!googleUser) {
-        return res.redirect("/?error=google_auth_failed");
+        return res.redirect(`${FRONTEND_URL}/?error=google_auth_failed`);
       }
 
       const user = await createOrGetGoogleUser(googleUser);
@@ -112,10 +106,10 @@ export async function registerRoutes(
       // Create session
       (req as any).session.user = user;
       
-      res.redirect("/dashboard");
+      res.redirect(`${FRONTEND_URL}/dashboard`);
     } catch (err) {
       console.error("Google callback error:", err);
-      res.redirect("/?error=google_callback_failed");
+      res.redirect(`${FRONTEND_URL}/?error=google_callback_failed`);
     }
   });
 
@@ -146,7 +140,7 @@ export async function registerRoutes(
     }
   });
 
-  // ==================== LOGOUT ====================
+  // LOGOUT
   
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
@@ -158,7 +152,7 @@ export async function registerRoutes(
     });
   });
 
-  // ==================== GUEST MODE ====================
+  // GUEST MODE
   
   // Guest mode endpoint
   app.post("/api/auth/guest", async (req, res) => {
@@ -175,10 +169,6 @@ export async function registerRoutes(
 
   // Helper to get user ID (supports all auth methods)
   const getUserId = (req: any): string | null => {
-    // Replit OAuth users
-    if (req.isAuthenticated?.() && req.user?.claims?.sub) {
-      return req.user.claims.sub;
-    }
     // Email/Google users (session-based)
     if (req.session?.user?.id) {
       return req.session.user.id;
@@ -192,13 +182,6 @@ export async function registerRoutes(
 
   // Helper to get user object (supports all auth methods)
   const getUser = (req: any): any => {
-    // Replit OAuth users
-    if (req.isAuthenticated?.() && req.user?.claims) {
-      return {
-        ...req.user.claims,
-        provider: "replit"
-      };
-    }
     // Email/Google users (session-based)
     if (req.session?.user) {
       return req.session.user;

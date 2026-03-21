@@ -1,16 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
 
 interface LayoutShellProps {
   children: React.ReactNode;
 }
 
 export function LayoutShell({ children }: LayoutShellProps) {
-  const pathname = usePathname();
   const { logout } = useAuth();
 
   return (

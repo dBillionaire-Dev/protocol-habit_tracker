@@ -7,6 +7,7 @@ import { ServiceWorkerProvider } from "@/components/service-worker-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://protocol-nex.vercel.app'),
   title: {
     default: "Protocol - Personal Habit Tracker",
     template: "%s | Protocol",
@@ -19,13 +20,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://protocol.app",
+    url: "https://protocol-nex.vercel.app",
     siteName: "Protocol",
     title: "Protocol - Personal Habit Tracker",
     description: "A serious framework for tracking habits. Build consistent habits, track your progress, and achieve your goals.",
     images: [
       {
-        url: "/og-image.svg",
+        url: "/og-image.png",
         width: 1200,
         height: 630,
         alt: "Protocol - Personal Habit Tracker",
@@ -36,7 +37,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Protocol - Personal Habit Tracker",
     description: "A serious framework for tracking habits. Build consistent habits, track your progress, and achieve your goals.",
-    images: ["/og-image.svg"],
+    images: ["/og-image.png"],
   },
   icons: {
     icon: "/favicon.svg",

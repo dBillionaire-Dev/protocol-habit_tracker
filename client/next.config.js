@@ -42,6 +42,9 @@ const nextConfig = {
     // Fix turbopack build issues
     output: "standalone",
 
+    turbopack: {
+        root: __dirname,
+    },
     typescript: {
         ignoreBuildErrors: true, // temporary
     },
@@ -65,7 +68,8 @@ const nextConfig = {
         return [
             {
                 source: "/api/:path*",
-                destination: process.env.API_URL + "/api/:path*",
+                destination:
+                    `${process.env.API_URL || "http://localhost:5000"}/api/:path*`,
             },
         ];
     },

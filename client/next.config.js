@@ -9,6 +9,7 @@ const nextConfig = {
       ignoreBuildErrors: true,
   },
   experimental: {
+      turbopack: false,
     serverActions: {
       bodySizeLimit: '2mb',
     },

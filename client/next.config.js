@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+   outputFileTracingRoot: __dirname,
   turbopack: {
-    root: '/run/media/nexa/A4F655F9F655CC64/Projects/Habit Tracker/protocol',
+    root: __dirname,
   },
   experimental: {
     serverActions: {

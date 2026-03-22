@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertHabitSchema, habits, habitEvents, dailyHabitStatus, habitDebts } from './schema';
+import { insertHabitSchema, habits, habitEvents, dailyHabitStatus, habitDebts } from './schema.js';
 
 export const errorSchemas = {
   validation: z.object({

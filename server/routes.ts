@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage.js";
-import { api } from "@shared/routes";
+import { api } from "shared/routes";
 import { z } from "zod";
 import { createEmailUser, verifyEmailUser, getUserById, getUserByEmail } from "./auth/email-auth.js";
 import { getGoogleAuthUrl, handleGoogleCallback, createOrGetGoogleUser, verifyGoogleToken } from "./auth/google-auth.js";

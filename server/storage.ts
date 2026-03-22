@@ -4,7 +4,7 @@ import {
   type InsertHabit, type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,
   type CreateHabitRequest, type HabitWithStatus,
   users, type User, type UpsertUser
-} from "@shared/schema";
+} from "shared/schema";
 import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
 
 export interface IStorage {
@@ -320,4 +320,4 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
-export { authStorage } from "./replit_integrations/auth/storage";
+export { authStorage } from "./replit_integrations/auth/storage.js";

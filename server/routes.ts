@@ -1,10 +1,10 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
-import { storage } from "./storage";
+import { storage } from "./storage.js";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { createEmailUser, verifyEmailUser, getUserById, getUserByEmail } from "./auth/email-auth";
-import { getGoogleAuthUrl, handleGoogleCallback, createOrGetGoogleUser, verifyGoogleToken } from "./auth/google-auth";
+import { createEmailUser, verifyEmailUser, getUserById, getUserByEmail } from "./auth/email-auth.js";
+import { getGoogleAuthUrl, handleGoogleCallback, createOrGetGoogleUser, verifyGoogleToken } from "./auth/google-auth.js";
 
 // Guest user ID for demo/testing
 const GUEST_USER_ID = "guest-demo-user";
@@ -85,11 +85,12 @@ export async function registerRoutes(
     res.redirect(authUrl);
   });
 
+    const FRONTEND_URL = process.env.APP_URL || "http://localhost:3000";
+
   // Google callback
   app.get("/api/auth/google/callback", async (req, res) => {
     try {
       const { code } = req.query;
-      const FRONTEND_URL = process.env.APP_URL || "http://localhost:3000";
       
       if (!code || typeof code !== "string") {
         return res.redirect(`${FRONTEND_URL}/?error=no_code`);

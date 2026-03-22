@@ -6,7 +6,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
-import { authStorage } from "./storage";
+import { authStorage } from "./storage.js";
 
 const getOidcConfig = memoize(
   async () => {

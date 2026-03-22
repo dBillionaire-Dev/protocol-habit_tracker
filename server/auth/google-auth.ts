@@ -1,5 +1,5 @@
-import { db } from "../db";
-import { users } from "../../shared/models/auth";
+import { db } from "../db.js";
+import { users } from "@shared/models/auth";
 import { eq } from "drizzle-orm";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;

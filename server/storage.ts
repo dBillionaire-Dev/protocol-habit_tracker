@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./db.js";
 import {
   habits, habitEvents, dailyHabitStatus, habitDebts,
   type InsertHabit, type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,

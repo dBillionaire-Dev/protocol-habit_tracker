@@ -14,8 +14,6 @@
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "baseUrl": ".",
-    "rootDir": "..",
-    "outDir": "dist",
     "types": ["node", "next/client"],
     "paths": {
       "@/*": ["./client/src/*"],

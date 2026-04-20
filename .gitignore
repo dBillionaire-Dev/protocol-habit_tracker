@@ -17,6 +17,7 @@ out
 # IDE
 .idea
 .vscode
+.qodo
 *.swp
 *.swo
 
@@ -44,6 +45,7 @@ coverage
 *.temp
 tmp/
 temp/
+.config
 
 # Build artifacts
 *.tar.gz
@@ -55,6 +57,5 @@ temp/
 
 #Mock Files
 .replit
-replit.md
 attached_assets/
 vite.config.ts

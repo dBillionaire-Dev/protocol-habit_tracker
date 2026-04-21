@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = `${process.env.APP_URL || "http://localhost:5000"}/api/auth/google/callback`;
+const GOOGLE_REDIRECT_URI = `${process.env.API_URl || "http://localhost:5000"}/api/auth/google/callback`;
 
 export interface GoogleUser {
   id: string;

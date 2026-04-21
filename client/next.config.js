@@ -39,6 +39,8 @@
 const nextConfig = {
     reactStrictMode: true,
 
+    allowedDevOrigins: ['192.168.0.199'],
+
     // Fix turbopack build issues
     output: "standalone",
 

@@ -40,8 +40,8 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
     apple: "/favicon.svg",
   },
   manifest: "/manifest.json",

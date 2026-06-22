@@ -10,9 +10,9 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/appicon.png",
+      "src": "/appicon.svg",
       "sizes": "any",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ],

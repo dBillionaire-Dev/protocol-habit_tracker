@@ -20,47 +20,78 @@ export default function LandingPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setIsLoading(true);
+  e.preventDefault();
+  setError("");
+  setIsLoading(true);
 
-    try {
-      // Import dynamically to avoid circular dependencies
-      const response = await fetch("/api/auth/email/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password, firstName, lastName }),
-      });
+  try {
+    const endpoint = isSignUp ? "/api/auth/email/signup" : "/api/auth/email/login";
+    const body = isSignUp
+      ? { email, password, firstName, lastName }
+      : { email, password };
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Authentication failed");
-      }
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
 
-      // If login (not signup), use login endpoint
-      if (!isSignUp) {
-        const loginResponse = await fetch("/api/auth/email/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email, password }),
-        });
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.message || "Authentication failed");
+    }
 
-        if (!loginResponse.ok) {
-          const error = await loginResponse.json();
-          throw new Error(error.message || "Login failed");
-        }
-      }
-
-      // Redirect to dashboard on success
-      window.location.href = "/dashboard";
+    window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // const handleEmailSubmit = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setError("");
+  //   setIsLoading(true);
+
+  //   try {
+  //     // Import dynamically to avoid circular dependencies
+  //     const response = await fetch("/api/auth/email/signup", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       credentials: "include",
+  //       body: JSON.stringify({ email, password, firstName, lastName }),
+  //     });
+
+  //     if (!response.ok) {
+  //       const error = await response.json();
+  //       throw new Error(error.message || "Authentication failed");
+  //     }
+
+  //     // If login (not signup), use login endpoint
+  //     if (!isSignUp) {
+  //       const loginResponse = await fetch("/api/auth/email/login", {
+  //         method: "POST",
+  //         headers: { "Content-Type": "application/json" },
+  //         credentials: "include",
+  //         body: JSON.stringify({ email, password }),
+  //       });
+
+  //       if (!loginResponse.ok) {
+  //         const error = await loginResponse.json();
+  //         throw new Error(error.message || "Login failed");
+  //       }
+  //     }
+
+  //     // Redirect to dashboard on success
+  //     window.location.href = "/dashboard";
+  //   } catch (err: any) {
+  //     setError(err.message);
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
 
   const handleGoogleLogin = () => {
     setError("");

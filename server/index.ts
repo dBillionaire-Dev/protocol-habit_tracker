@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
 import { registerRoutes } from "./routes.js";
 import { serveStatic } from "./static.js";
 import { createServer } from "http";
@@ -20,6 +22,23 @@ app.use(
     },
   }),
 );
+
+const PgStore = connectPg(session);
+app.use(session({
+  store: new PgStore({ 
+    conString: process.env.DATABASE_URL,
+    tableName: "sessions"  
+  }),
+  secret: process.env.SESSION_SECRET!,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+  },
+}));
 
 app.use(express.urlencoded({ extended: false }));
 

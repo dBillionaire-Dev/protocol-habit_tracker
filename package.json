@@ -2,9 +2,21 @@
   "name": "protocol-root",
   "private": true,
   "workspaces": {
-    "packages": ["server"]
+    "packages": [
+      "server"
+    ]
   },
   "scripts": {
-    "start": "node server/dist/index.js"
+    "start": "node server/dist/index.js",
+    "db:push": "dotenv -e server/.env -- drizzle-kit push",
+    "db:studio": "dotenv -e server/.env -- drizzle-kit studio"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.39.3",
+    "drizzle-zod": "^0.7.1",
+    "zod": "^4.4.3"
   }
 }

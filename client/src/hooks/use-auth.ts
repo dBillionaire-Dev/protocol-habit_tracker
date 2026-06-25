@@ -33,11 +33,11 @@ async function logout(): Promise<void> {
     method: "POST",
     credentials: "include",
   });
-  
+
   if (!response.ok) {
     throw new Error("Logout failed");
   }
-  
+
   // Redirect to home
   window.location.href = "/";
 }
@@ -55,7 +55,10 @@ async function loginAsGuest(): Promise<AuthUser> {
   return response.json();
 }
 
-async function loginWithEmail(email: string, password: string): Promise<AuthUser> {
+async function loginWithEmail(
+  email: string,
+  password: string,
+): Promise<AuthUser> {
   const response = await fetch("/api/auth/email/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -75,7 +78,7 @@ async function signupWithEmail(
   email: string,
   password: string,
   firstName?: string,
-  lastName?: string
+  lastName?: string,
 ): Promise<AuthUser> {
   const response = await fetch("/api/auth/email/signup", {
     method: "POST",
@@ -116,6 +119,8 @@ export function useAuth() {
     mutationFn: loginAsGuest,
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/user"], data);
+
+      window.location.href = "/dashboard";
     },
   });
 
@@ -149,14 +154,16 @@ export function useAuth() {
   });
 
   return {
-    user: user ? {
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      profileImageUrl: user.profileImageUrl,
-      showOnboarding: user.showOnboarding,
-    } : null,
+    user: user
+      ? {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          profileImageUrl: user.profileImageUrl,
+          showOnboarding: user.showOnboarding,
+        }
+      : null,
     isLoading,
     isAuthenticated: !!user,
     logout: logoutMutation.mutate,

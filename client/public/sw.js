@@ -61,6 +61,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  useEffect(() => {
+  // Service worker causes reload loops in dev due to stale chunk caching
+  if (process.env.NODE_ENV === "development") return;
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        console.log("Service Worker registered:", registration.scope);
+      })
+      .catch((error) => {
+        console.error("Service Worker registration failed:", error);
+      });
+  }
+}, []);
+
   // Handle API calls differently
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(

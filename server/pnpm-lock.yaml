@@ -42,7 +42,7 @@ importers:
         specifier: ^0.39.3
         version: 0.39.3(@types/pg@8.20.0)(pg@8.22.0)
       drizzle-zod:
-        specifier: ^0.7.0
+        specifier: ^0.7.1
         version: 0.7.1(drizzle-orm@0.39.3(@types/pg@8.20.0)(pg@8.22.0))(zod@3.25.76)
       embla-carousel-react:
         specifier: ^8.6.0
@@ -93,7 +93,7 @@ importers:
         specifier: ^8.18.0
         version: 8.21.0(bufferutil@4.1.0)
       zod:
-        specifier: ^3.24.2
+        specifier: ^3.25.76
         version: 3.25.76
       zod-validation-error:
         specifier: ^3.4.0

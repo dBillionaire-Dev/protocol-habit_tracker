@@ -320,4 +320,3 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
-export { authStorage } from "./replit_integrations/auth/storage.js";

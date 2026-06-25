@@ -3,8 +3,18 @@ import type { Server } from "http";
 import { storage } from "./storage.js";
 import { api } from "shared/routes";
 import { z } from "zod";
-import { createEmailUser, verifyEmailUser, getUserById, getUserByEmail } from "./auth/email-auth.js";
-import { getGoogleAuthUrl, handleGoogleCallback, createOrGetGoogleUser, verifyGoogleToken } from "./auth/google-auth.js";
+import {
+  createEmailUser,
+  verifyEmailUser,
+  getUserById,
+  getUserByEmail,
+} from "./auth/email-auth.js";
+import {
+  getGoogleAuthUrl,
+  handleGoogleCallback,
+  createOrGetGoogleUser,
+  verifyGoogleToken,
+} from "./auth/google-auth.js";
 
 // Guest user ID for demo/testing
 const GUEST_USER_ID = "guest-demo-user";
@@ -21,17 +31,19 @@ interface SessionUser {
 
 export async function registerRoutes(
   httpServer: Server,
-  app: Express
+  app: Express,
 ): Promise<Server> {
-   // EMAIL/PASSWORD AUTH
-  
+  // EMAIL/PASSWORD AUTH
+
   // Email signup
   app.post("/api/auth/email/signup", async (req, res) => {
     try {
       const { email, password, firstName, lastName } = req.body;
-      
+
       if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+        return res
+          .status(400)
+          .json({ message: "Email and password are required" });
       }
 
       // Check if user already exists
@@ -41,10 +53,10 @@ export async function registerRoutes(
       }
 
       const user = await createEmailUser(email, password, firstName, lastName);
-      
+
       // Create session
       (req as any).session.user = user;
-      
+
       res.status(201).json(user);
     } catch (err) {
       console.error("Email signup error:", err);
@@ -56,20 +68,22 @@ export async function registerRoutes(
   app.post("/api/auth/email/login", async (req, res) => {
     try {
       const { email, password } = req.body;
-      
+
       if (!email || !password) {
-        return res.status(400).json({ message: "Email and password are required" });
+        return res
+          .status(400)
+          .json({ message: "Email and password are required" });
       }
 
       const user = await verifyEmailUser(email, password);
-      
+
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
       // Create session
       (req as any).session.user = user;
-      
+
       res.json(user);
     } catch (err) {
       console.error("Email login error:", err);
@@ -77,36 +91,36 @@ export async function registerRoutes(
     }
   });
 
-  // GOOGLE OAUTH 
-  
+  // GOOGLE OAUTH
+
   // Google login redirect
   app.get("/api/auth/google", (req, res) => {
     const authUrl = getGoogleAuthUrl();
     res.redirect(authUrl);
   });
 
-    const FRONTEND_URL = process.env.APP_URL || "http://localhost:3000";
+  const FRONTEND_URL = process.env.APP_URL || "http://localhost:3000";
 
   // Google callback
   app.get("/api/auth/google/callback", async (req, res) => {
     try {
       const { code } = req.query;
-      
+
       if (!code || typeof code !== "string") {
         return res.redirect(`${FRONTEND_URL}/?error=no_code`);
       }
 
       const googleUser = await handleGoogleCallback(code);
-      
+
       if (!googleUser) {
         return res.redirect(`${FRONTEND_URL}/?error=google_auth_failed`);
       }
 
       const user = await createOrGetGoogleUser(googleUser);
-      
+
       // Create session
       (req as any).session.user = user;
-      
+
       res.redirect(`${FRONTEND_URL}/dashboard`);
     } catch (err) {
       console.error("Google callback error:", err);
@@ -118,22 +132,22 @@ export async function registerRoutes(
   app.post("/api/auth/google/token", async (req, res) => {
     try {
       const { idToken } = req.body;
-      
+
       if (!idToken) {
         return res.status(400).json({ message: "ID token required" });
       }
 
       const googleUser = await verifyGoogleToken(idToken);
-      
+
       if (!googleUser) {
         return res.status(401).json({ message: "Invalid Google token" });
       }
 
       const user = await createOrGetGoogleUser(googleUser);
-      
+
       // Create session
       (req as any).session.user = user;
-      
+
       res.json(user);
     } catch (err) {
       console.error("Google token login error:", err);
@@ -142,7 +156,7 @@ export async function registerRoutes(
   });
 
   // LOGOUT
-  
+
   app.post("/api/auth/logout", (req, res) => {
     req.session.destroy((err) => {
       if (err) {
@@ -154,17 +168,17 @@ export async function registerRoutes(
   });
 
   // GUEST MODE
-  
+
   // Guest mode endpoint
   app.post("/api/auth/guest", async (req, res) => {
     // Set up guest session
     (req as any).session.guestUser = true;
-    res.json({ 
-      id: GUEST_USER_ID, 
+    res.json({
+      id: GUEST_USER_ID,
       email: "guest@demo.app",
       firstName: "Guest",
       lastName: "User",
-      profileImageUrl: null 
+      profileImageUrl: null,
     });
   });
 
@@ -195,7 +209,7 @@ export async function registerRoutes(
         firstName: "Guest",
         lastName: "User",
         profileImageUrl: null,
-        provider: "guest"
+        provider: "guest",
       };
     }
     return null;
@@ -214,7 +228,7 @@ export async function registerRoutes(
   // Modified auth/user endpoint to support all auth methods
   app.get("/api/auth/user", async (req: any, res) => {
     const user = getUser(req);
-    
+
     if (!user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -223,7 +237,8 @@ export async function registerRoutes(
     if (user.provider === "guest") {
       return res.json({
         ...user,
-        showOnboarding: req.session.guestShowOnboarding !== false ? "true" : "false"
+        showOnboarding:
+          req.session.guestShowOnboarding !== false ? "true" : "false",
       });
     }
 
@@ -231,7 +246,7 @@ export async function registerRoutes(
     const dbUser = await storage.getUser(user.id);
     res.json({
       ...user,
-      showOnboarding: dbUser?.showOnboarding ?? "true"
+      showOnboarding: dbUser?.showOnboarding ?? "true",
     });
   });
 
@@ -253,10 +268,23 @@ export async function registerRoutes(
   });
 
   // Habits Routes
-  app.get(api.habits.list.path, requireUser, async (req: any, res) => {
-    const habits = await storage.getHabits(req.userId);
-    res.json(habits);
-  });
+  app.get(
+    api.habits.list.path,
+    requireUser,
+    async (req: any, res, next: NextFunction) => {
+      try {
+        const habits = await storage.getHabits(req.userId);
+        res.json(habits);
+      } catch (err) {
+        // This safely releases the context and prints the exact error in your Express logs
+        console.error(
+          `[Express] Error fetching habits for user ${req.userId}:`,
+          err,
+        );
+        next(err);
+      }
+    },
+  );
 
   app.post(api.habits.create.path, requireUser, async (req: any, res) => {
     try {
@@ -267,7 +295,7 @@ export async function registerRoutes(
       if (err instanceof z.ZodError) {
         return res.status(400).json({
           message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
+          field: err.errors[0].path.join("."),
         });
       }
       throw err;
@@ -276,7 +304,7 @@ export async function registerRoutes(
 
   app.get(api.habits.get.path, requireUser, async (req: any, res) => {
     const habit = await storage.getHabit(Number(req.params.id));
-    if (!habit) return res.status(404).json({ message: 'Habit not found' });
+    if (!habit) return res.status(404).json({ message: "Habit not found" });
     if (habit.userId !== req.userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -302,41 +330,59 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Unauthorized" });
       }
       const input = api.habits.logEvent.input.parse(req.body);
-      const event = await storage.logHabitEvent(Number(req.params.id), input.notes);
+      const event = await storage.logHabitEvent(
+        Number(req.params.id),
+        input.notes,
+      );
       res.status(201).json(event);
     } catch (err) {
       res.status(500).json({ message: "Failed to log event" });
     }
   });
 
-  app.post(api.habits.confirmCleanDay.path, requireUser, async (req: any, res) => {
-    try {
-      const habit = await storage.getHabit(Number(req.params.id));
-      if (!habit || habit.userId !== req.userId) {
-        return res.status(401).json({ message: "Unauthorized" });
+  app.post(
+    api.habits.confirmCleanDay.path,
+    requireUser,
+    async (req: any, res) => {
+      try {
+        const habit = await storage.getHabit(Number(req.params.id));
+        if (!habit || habit.userId !== req.userId) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const input = api.habits.confirmCleanDay.input.parse(req.body);
+        const result = await storage.confirmCleanDay(
+          Number(req.params.id),
+          input.date,
+        );
+        res.json({ debt: result.debt, message: "Clean day confirmed" });
+      } catch (err) {
+        res.status(500).json({ message: "Failed to confirm" });
       }
-      const input = api.habits.confirmCleanDay.input.parse(req.body);
-      const result = await storage.confirmCleanDay(Number(req.params.id), input.date);
-      res.json({ debt: result.debt, message: "Clean day confirmed" });
-    } catch (err) {
-      res.status(500).json({ message: "Failed to confirm" });
-    }
-  });
+    },
+  );
 
-  app.post(api.habits.completeDaily.path, requireUser, async (req: any, res) => {
-    try {
-      const habit = await storage.getHabit(Number(req.params.id));
-      if (!habit || habit.userId !== req.userId) {
-        return res.status(401).json({ message: "Unauthorized" });
+  app.post(
+    api.habits.completeDaily.path,
+    requireUser,
+    async (req: any, res) => {
+      try {
+        const habit = await storage.getHabit(Number(req.params.id));
+        if (!habit || habit.userId !== req.userId) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        const input = api.habits.completeDaily.input.parse(req.body);
+        const result = await storage.completeDailyTask(
+          Number(req.params.id),
+          input.date,
+          input.completed,
+        );
+        res.json(result);
+      } catch (err) {
+        console.error("Complete task error:", err);
+        res.status(500).json({ message: "Failed to complete task" });
       }
-      const input = api.habits.completeDaily.input.parse(req.body);
-      const result = await storage.completeDailyTask(Number(req.params.id), input.date, input.completed);
-      res.json(result);
-    } catch (err) {
-      console.error("Complete task error:", err);
-      res.status(500).json({ message: "Failed to complete task" });
-    }
-  });
+    },
+  );
 
   return httpServer;
 }

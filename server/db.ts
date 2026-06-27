@@ -46,15 +46,21 @@
 // export const db = drizzle(pool, { schema });
 //
 
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is missing from your environment variables");
 }
 
-// 1. Establish a stateless HTTP fetch client
-const sql = neon(process.env.DATABASE_URL);
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+  max: 10,
+  idleTimeoutMillis: 15000,
+  connectionTimeoutMillis: 5000,
+});
 
-// 2. Initialize Drizzle with the matching HTTP adapter
-export const db = drizzle({ client: sql });
+export const db = drizzle(pool);

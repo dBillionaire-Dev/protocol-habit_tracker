@@ -10,7 +10,7 @@ PROTOCOL is a full-stack habit tracking Progressive Web App (PWA) designed for s
 
 2. **Build Habits** (Penalty-stacking): Track positive habits like exercise or reading. Missing daily tasks increases penalty levels, making subsequent days harder.
 
-The app uses a time-restricted confirmation window (10 PM - 12 AM) for daily habit confirmations, with automatic processing at midnight.
+The app uses a time-restricted confirmation window (11 PM - 12 AM) for daily habit confirmations, with automatic processing at midnight.
 
 ## User Preferences
 

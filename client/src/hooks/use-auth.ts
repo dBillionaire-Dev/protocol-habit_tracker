@@ -12,12 +12,16 @@ interface AuthUser {
   showOnboarding?: string;
 }
 
-async function fetchUser(): Promise<AuthUser | null> {
+async function fetchUser(attempt = 0): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
   });
 
   if (response.status === 401) {
+    if (attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return fetchUser(1);
+    }
     return null;
   }
 
@@ -120,7 +124,7 @@ export function useAuth() {
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/user"], data);
 
-      window.location.href = "/dashboard";
+      window.location.assign("/dashboard");
     },
   });
 
@@ -129,6 +133,7 @@ export function useAuth() {
       loginWithEmail(email, password),
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/user"], data);
+      window.location.assign("/dashboard");
     },
   });
 
@@ -146,6 +151,7 @@ export function useAuth() {
     }) => signupWithEmail(email, password, firstName, lastName),
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/user"], data);
+      window.location.assign("/dashboard");
     },
   });
 

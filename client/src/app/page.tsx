@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Shield, Lock, Activity, TrendingUp, User, Mail, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function LandingPage() {
-  const { loginAsGuest, isGuestLoggingIn, loginWithGoogle, isGoogleLoggingIn } = useAuth();
+  const router = useRouter();
+  const { user, isLoading: isAuthLoading, loginAsGuest, isGuestLoggingIn, loginWithGoogle, isGoogleLoggingIn } = useAuth();
   const [showAuthForm, setShowAuthForm] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -18,6 +20,12 @@ export default function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthLoading && user) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthLoading, router, user]);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -42,7 +50,7 @@ export default function LandingPage() {
       throw new Error(err.message || "Authentication failed");
     }
 
-    window.location.href = "/dashboard";
+    window.location.assign("/dashboard");
     } catch (err: any) {
       setError(err.message);
     } finally {

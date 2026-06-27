@@ -9,18 +9,30 @@ function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`;
 function getConfirmCleanDayUrl(id: number): string { return `/api/habits/${id}/clean-day`; }
 function getCompleteDailyUrl(id: number): string { return `/api/habits/${id}/complete`; }
 
+async function fetchHabits(attempt = 0): Promise<HabitWithStatus[]> {
+  const res = await fetch("/api/habits", { credentials: "include" });
+
+  if (res.status === 401) {
+    if (attempt === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return fetchHabits(1);
+    }
+    throw new Error("Unauthorized");
+  }
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch habits");
+  }
+
+  const data = await res.json();
+  return data as HabitWithStatus[];
+}
+
 // GET /api/habits
 export function useHabits() {
   return useQuery({
     queryKey: ["/api/habits"],
-    queryFn: async () => {
-      const res = await fetch("/api/habits", { credentials: "include" });
-      if (res.status === 401) throw new Error("Unauthorized");
-      if (!res.ok) throw new Error("Failed to fetch habits");
-      
-      const data = await res.json();
-      return data as HabitWithStatus[];
-    },
+    queryFn: () => fetchHabits(),
   });
 }
 

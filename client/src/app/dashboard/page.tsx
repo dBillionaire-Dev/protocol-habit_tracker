@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { AlertCircle, Calendar, RefreshCw } from "lucide-react";
@@ -14,17 +15,32 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useHabits } from "@/hooks/use-habits";
+import { useAuth } from "@/hooks/use-auth";
 import type { HabitWithStatus } from "@/types/schema";
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const { data: habits, isLoading, error, refetch } = useHabits();
   const queryClient = useQueryClient();
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthLoading && !user && hasCheckedAuth) {
+      router.replace("/");
+      return;
+    }
+
+    if (!isAuthLoading) {
+      setHasCheckedAuth(true);
+    }
+  }, [hasCheckedAuth, isAuthLoading, router, user]);
 
   // Fetch user to check onboarding preference
-  const { data: user } = useQuery({
+  const { data: authUser } = useQuery({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
       const res = await fetch("/api/auth/user", { credentials: "include" });
@@ -52,10 +68,10 @@ export default function DashboardPage() {
 
   // Show onboarding modal based on user preference
   useEffect(() => {
-    if (user && user.showOnboarding === "true") {
+    if (authUser && authUser.showOnboarding === "true") {
       setShowOnboarding(true);
     }
-  }, [user]);
+  }, [authUser]);
 
   const handleCloseOnboarding = (dontShowAgain: boolean) => {
     setShowOnboarding(false);

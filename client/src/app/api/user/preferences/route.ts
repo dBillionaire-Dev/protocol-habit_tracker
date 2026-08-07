@@ -1,30 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
-const GUEST_USER_ID = "guest-demo-user";
+import { storage } from "@/lib/storage";
+import { resolveUser, GUEST_USER_ID } from "@/lib/auth/require-user";
 
 export async function POST(request: NextRequest) {
-  const userId = GUEST_USER_ID;
-  
+  const user = await resolveUser(request);
+  if (!user) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const body = await request.json();
-    const { showOnboarding } = body;
+    const { showOnboarding } = await request.json();
 
-    // For guest users, store in cookies
-    const cookieStore = await cookies();
-    cookieStore.set("guestShowOnboarding", showOnboarding !== "false" ? "true" : "false", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-    });
+    if (user.id === GUEST_USER_ID) {
+      // Guest is stateless — just echo back what was sent.
+      return NextResponse.json({ showOnboarding });
+    }
 
-    return NextResponse.json({ showOnboarding: showOnboarding });
+    await storage.updateUserPreferences(user.id, { showOnboarding });
+    return NextResponse.json({ showOnboarding });
   } catch (error) {
     console.error("Update preferences error:", error);
     return NextResponse.json(
       { message: "Failed to update preferences" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

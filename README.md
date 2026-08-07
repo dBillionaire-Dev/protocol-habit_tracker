@@ -35,29 +35,42 @@ Preferred communication style: Simple, everyday language.
 - **Build Tool**: Next.js
 
 ### Backend Architecture
-- **Runtime**: Node.js with Express
-- **Language**: TypeScript (ESM modules)
-- **API Pattern**: RESTful JSON API under `/api/*` routes
-- **Session Management**: Express sessions with PostgreSQL store
+- **Runtime**: Next.js Route Handlers (`client/src/app/api/**`) — no separate server process
+- **Language**: TypeScript
+- **API Pattern**: RESTful JSON API under `/api/*` routes, same-origin with the frontend
+- **Session Management**: Stateless. Real users authenticate via Supabase Auth (session lives in an httpOnly cookie managed by `@supabase/ssr`); guest mode is a client-tracked flag sent as an `X-Guest-Mode` header — no server-side session store at all
 
 ### Data Storage
-- **Database**: PostgreSQL
-- **ORM**: Drizzle ORM with Zod validation (drizzle-zod)
-- **Schema Location**: `shared/schema.ts` for shared types between client and server
+- **Database**: Supabase Postgres
+- **ORM**: Drizzle ORM (`drizzle-orm/node-postgres`) with Zod validation (drizzle-zod)
+- **Schema Location**: `shared/schema.ts` for types shared across the app
 - **Migrations**: Managed via `drizzle-kit push`
+- **Storage**: Supabase Storage (planned, for future file/image uploads)
 
 ### Authentication
-- **Primary**: Google Auth (OpenID Connect)
-- **Secondary**: Email Auth (Magic Link)
-- **Guest Mode**: Demo user support for testing without authentication
-- **Session Storage**: PostgreSQL-backed sessions via `connect-pg-simple`
+- **Primary**: Supabase Auth — Google OAuth (hosted flow, redirects through `/auth/callback`)
+- **Secondary**: Supabase Auth — email/password
+- **Guest Mode**: Stateless demo user, no Supabase session or DB row required
+
+```
+Google
+  │
+  ▼
+Supabase Auth (Google)
+  │
+  ▼
+Next.js Frontend + Route Handlers (Vercel)
+  │
+  ▼
+Supabase Postgres + Supabase Storage
+```
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- PostgreSQL database
+- A Supabase project (Postgres + Auth)
 - pnpm (recommended) or npm
 
 ### Installation
@@ -66,10 +79,14 @@ Preferred communication style: Simple, everyday language.
 # Install dependencies
 pnpm install
 
-# Copy environment file
-cp .env.example .env
+# Copy environment file (into client/, where Next.js reads it)
+cp .env.example client/.env
 
-# Update DATABASE_URL in .env with your PostgreSQL connection string
+# Fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and
+# DATABASE_URL from your Supabase project (Project Settings -> API and
+# -> Database). Also enable the Google provider under Supabase's
+# Authentication -> Providers, with your Google OAuth client ID/secret and
+# a redirect URI of `<your Supabase URL>/auth/v1/callback`.
 
 # Run database migrations
 pnpm db:push
@@ -80,12 +97,15 @@ pnpm dev
 
 ### Environment Variables
 
-| Variable               | Description                           |
-|------------------------|---------------------------------------|
-| `DATABASE_URL`         | PostgreSQL connection string          |
-| `GOOGLE_CLIENT_ID`     | Google OAuth client ID (optional)     |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret (optional) |
-| `SESSION_SECRET`       | Session encryption secret             |
+| Variable                        | Description                                         |
+|----------------------------------|------------------------------------------------------|
+| `NEXT_PUBLIC_SUPABASE_URL`       | Supabase project URL                                  |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Supabase anon/public API key                          |
+| `DATABASE_URL`                   | Supabase Postgres connection string                   |
+| `NEXT_PUBLIC_APP_URL`            | Public app URL, used for OAuth redirect construction  |
+
+Google OAuth credentials (client ID/secret) are configured directly in the
+Supabase dashboard, not as env vars in this app.
 
 ## Project Structure
 
@@ -106,12 +126,18 @@ nextjs/
 │   │   ├── habit-card.tsx   # Habit display card
 │   │   ├── layout-shell.tsx # Dashboard layout
 │   │   └── ...
-│   ├── hooks/               # Custom React hooks
-│   ├── lib/                 # Utility functions
-│   └── types/               # TypeScript types
-├── drizzle.config.ts        # Drizzle ORM config
-├── tailwind.config.ts       # Tailwind CSS config
-└── tsconfig.json            # TypeScript config
+│   ├── hooks/                # Custom React hooks
+│   ├── lib/
+│   │   ├── supabase/          # Browser + server Supabase clients
+│   │   ├── auth/              # resolveUser() — shared by every route handler
+│   │   ├── db.ts               # Drizzle client (Supabase Postgres)
+│   │   ├── storage.ts          # Data-access layer used by route handlers
+│   │   └── api.ts               # Client-side fetch wrapper (guest-mode header)
+│   └── middleware.ts          # Refreshes the Supabase session cookie
+├── shared/                    # schema.ts + models, shared across the app
+├── drizzle.config.ts          # Drizzle ORM config
+├── tailwind.config.ts         # Tailwind CSS config
+└── tsconfig.json              # TypeScript config
 ```
 
 ## Key Implementation

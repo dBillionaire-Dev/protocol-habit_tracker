@@ -8,7 +8,14 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 
 export default function LandingPage() {
-  const { loginAsGuest, isGuestLoggingIn, loginWithGoogle, isGoogleLoggingIn } = useAuth();
+  const {
+    loginAsGuest,
+    isGuestLoggingIn,
+    loginWithGoogle,
+    isGoogleLoggingIn,
+    loginWithEmail,
+    signupWithEmail,
+  } = useAuth();
   const [showAuthForm, setShowAuthForm] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -25,73 +32,32 @@ export default function LandingPage() {
   setIsLoading(true);
 
   try {
-    const endpoint = isSignUp ? "/api/auth/email/signup" : "/api/auth/email/login";
-    const body = isSignUp
-      ? { email, password, firstName, lastName }
-      : { email, password };
-
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.message || "Authentication failed");
+    if (isSignUp) {
+      await new Promise<void>((resolve, reject) =>
+        signupWithEmail(
+          { email, password, firstName, lastName },
+          { onSuccess: () => resolve(), onError: (err: any) => reject(err) },
+        ),
+      );
+      // Supabase may require email confirmation before a session exists;
+      // send them to check their inbox rather than assuming instant login.
+      setError("Check your email to confirm your account, then sign in.");
+      setIsSignUp(false);
+    } else {
+      await new Promise<void>((resolve, reject) =>
+        loginWithEmail(
+          { email, password },
+          { onSuccess: () => resolve(), onError: (err: any) => reject(err) },
+        ),
+      );
+      window.location.href = "/dashboard";
     }
-
-    window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // const handleEmailSubmit = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setError("");
-  //   setIsLoading(true);
-
-  //   try {
-  //     // Import dynamically to avoid circular dependencies
-  //     const response = await fetch("/api/auth/email/signup", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       credentials: "include",
-  //       body: JSON.stringify({ email, password, firstName, lastName }),
-  //     });
-
-  //     if (!response.ok) {
-  //       const error = await response.json();
-  //       throw new Error(error.message || "Authentication failed");
-  //     }
-
-  //     // If login (not signup), use login endpoint
-  //     if (!isSignUp) {
-  //       const loginResponse = await fetch("/api/auth/email/login", {
-  //         method: "POST",
-  //         headers: { "Content-Type": "application/json" },
-  //         credentials: "include",
-  //         body: JSON.stringify({ email, password }),
-  //       });
-
-  //       if (!loginResponse.ok) {
-  //         const error = await loginResponse.json();
-  //         throw new Error(error.message || "Login failed");
-  //       }
-  //     }
-
-  //     // Redirect to dashboard on success
-  //     window.location.href = "/dashboard";
-  //   } catch (err: any) {
-  //     setError(err.message);
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
 
   const handleGoogleLogin = () => {
     setError("");

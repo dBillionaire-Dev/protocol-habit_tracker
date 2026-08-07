@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { type InsertHabit, type HabitWithStatus } from "@/types/schema";
+import { type InsertHabit, type HabitWithStatus } from "shared/schema";
+import { apiFetch } from "@/lib/api";
 
-// API endpoints helper functions
 function getDeleteUrl(id: number): string { return `/api/habits/${id}`; }
 function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`; }
 function getConfirmCleanDayUrl(id: number): string { return `/api/habits/${id}/clean-day`; }
@@ -14,10 +14,10 @@ export function useHabits() {
   return useQuery({
     queryKey: ["/api/habits"],
     queryFn: async () => {
-      const res = await fetch("/api/habits", { credentials: "include" });
+      const res = await apiFetch("/api/habits");
       if (res.status === 401) throw new Error("Unauthorized");
       if (!res.ok) throw new Error("Failed to fetch habits");
-      
+
       const data = await res.json();
       return data as HabitWithStatus[];
     },
@@ -29,11 +29,9 @@ export function useCreateHabit() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (habit: InsertHabit) => {
-      const res = await fetch("/api/habits", {
+      const res = await apiFetch("/api/habits", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(habit),
-        credentials: "include",
       });
 
       if (!res.ok) throw new Error("Failed to create habit");
@@ -50,10 +48,7 @@ export function useDeleteHabit() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
-      const res = await fetch(getDeleteUrl(id), { 
-        method: "DELETE",
-        credentials: "include" 
-      });
+      const res = await apiFetch(getDeleteUrl(id), { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete habit");
     },
     onSuccess: () => {
@@ -67,11 +62,9 @@ export function useLogHabitEvent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, notes }: { id: number; notes?: string }) => {
-      const res = await fetch(getLogEventUrl(id), {
+      const res = await apiFetch(getLogEventUrl(id), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes }),
-        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to log event");
       return res.json();
@@ -87,11 +80,9 @@ export function useConfirmCleanDay() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
-      const res = await fetch(getConfirmCleanDayUrl(id), {
+      const res = await apiFetch(getConfirmCleanDayUrl(id), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date }),
-        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to confirm clean day");
       return res.json();
@@ -107,11 +98,9 @@ export function useCompleteDaily() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date, completed }: { id: number; date: string; completed: boolean }) => {
-      const res = await fetch(getCompleteDailyUrl(id), {
+      const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, completed }),
-        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to update status");
       return res.json();
@@ -127,11 +116,9 @@ export function useMarkMissed() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
-      const res = await fetch(getCompleteDailyUrl(id), {
+      const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, completed: false }),
-        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to mark as missed");
       return res.json();

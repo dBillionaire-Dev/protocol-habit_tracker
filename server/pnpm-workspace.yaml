@@ -1,4 +1,0 @@
-allowBuilds:
-  bufferutil: true
-  es5-ext: false
-  esbuild: true

@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { insertHabitSchema } from "@/types/schema";
+import { insertHabitSchema } from "shared/schema";
 import { useCreateHabit } from "@/hooks/use-habits";
 import { z } from "zod";
 

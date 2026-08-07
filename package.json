@@ -3,23 +3,22 @@
   "private": true,
   "workspaces": {
     "packages": [
-      "server"
+      "client"
     ]
   },
   "scripts": {
-    "start": "node server/dist/index.js",
-    "db:push": "dotenv -e server/.env -- drizzle-kit push",
-    "db:studio": "dotenv -e server/.env -- drizzle-kit studio"
+    "dev": "npm --workspace client run dev",
+    "build": "npm --workspace client run build",
+    "start": "npm --workspace client run start",
+    "db:push": "dotenv -e client/.env -- drizzle-kit push",
+    "db:studio": "dotenv -e client/.env -- drizzle-kit studio"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1",
     "dotenv-cli": "^11.0.0"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.1",
-    "ws": "^8.21.0",
     "zod": "^4.4.3"
   }
 }

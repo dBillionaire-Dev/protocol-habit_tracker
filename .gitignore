@@ -58,4 +58,4 @@ temp/
 #Mock Files
 .replit
 attached_assets/
-vite.config.ts
+vite.config.ts*.tsbuildinfo

@@ -54,6 +54,7 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
                     <li>You must execute the habit's protocol within its time window</li>
                     <li>Executing a protocol: This means the protocol was strictly adhered to and it increases your streak, reduces any existing debt</li>
                     <li>Missing a protocol and failure to confirm (execute the protocol) at the end of the day during the confirmation window: Automatically breaks the streak, and increases debt</li>
+                    <li>Any unpaid debt is carried over to the next day and added to that day's normal requirement. For example, 1 missed protocol creates 1 debt, making the next day's requirement 2 protocols.</li>
                   </ul>
                 </div>
 
@@ -63,9 +64,10 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
                     These are habits you must avoid completely. Examples: no junk food, no smoking, no doomscrolling on social media.
                   </p>
                   <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                    <li>You log actions for these habits every time it occurs</li>
+                    <li>You must log an event every time the avoided habit occurs</li>
                     <li>If you avoid the habit for the entire day: The day is confirmed as a <strong>Clean Day</strong>, and your streak increases</li>
-                    <li>If you perform the habit or log an event for it: The streak breaks immediately, debt increases</li>
+                    <li>If you perform the habit or log an event for it: The streak breaks immediately and debt increases</li>
+                    <li>Debt is paid off through clean days: <strong>1 Clean Day = 1 debt paid</strong></li>
                   </ul>
                 </div>
               </CardContent>

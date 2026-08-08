@@ -84,15 +84,15 @@ export default function LandingPage() {
             <Shield className="w-8 h-8" />
             <span className="text-xl font-bold tracking-widest">PROTOCOL</span>
           </div>
-          
+
           <h1 className="text-5xl lg:text-7xl font-bold tracking-tighter mb-6 leading-[1.1]">
             DISCIPLINE<br />IS NOT A<br />GAME.
           </h1>
-          
+
           <p className="text-lg text-zinc-400 max-w-md leading-relaxed">
-            A serious framework for tracking habits. 
-            Accumulate debt for failures. 
-            Stack penalties for missed targets. 
+            A serious framework for tracking habits.
+            Accumulate debt for failures.
+            Stack penalties for missed targets.
             Accountability is the only metric that matters.
           </p>
         </div>
@@ -100,7 +100,7 @@ export default function LandingPage() {
         <div className="relative z-10 mt-12 grid grid-cols-2 gap-8 text-sm font-mono text-zinc-500">
           <div>
             <p className="text-white mb-2 font-bold flex items-center gap-2">
-              <Activity className="w-4 h-4 text-red-500" /> 
+              <Activity className="w-4 h-4 text-red-500" />
               AVOIDANCE DEBT
             </p>
             Bad habits aren't just reset. They accrue debt that must be paid down.
@@ -126,7 +126,7 @@ export default function LandingPage() {
           {/* OAuth Buttons */}
           <div className="space-y-4">
             {/* Google Sign In */}
-            <Button 
+            <Button
               className="w-full h-12 text-base bg-white hover:bg-gray-100 text-black border border-gray-300 shadow-sm"
               onClick={handleGoogleLogin}
               disabled={isGoogleLoggingIn}
@@ -158,8 +158,8 @@ export default function LandingPage() {
 
 
             {/* Email/Password Toggle */}
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="w-full h-12 text-base"
               onClick={() => {
                 setShowAuthForm(!showAuthForm);
@@ -289,8 +289,8 @@ export default function LandingPage() {
             </div>
 
             {/* Guest Mode */}
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               className="w-full h-12 text-muted-foreground"
               onClick={handleGuestLogin}
               disabled={isGuestLoggingIn}
@@ -302,7 +302,7 @@ export default function LandingPage() {
               )}
               Continue as Guest
             </Button>
-            
+
             <p className="text-xs text-center text-muted-foreground px-8">
               By authenticating, you agree to accept full responsibility for your actions and inactions.
             </p>

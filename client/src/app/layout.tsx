@@ -9,11 +9,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL('https://protocol-nex.vercel.app'),
   title: {
-    default: "Protocol - Personal Habit Tracker",
+    default: "Protocol - Personal Discipline System",
     template: "%s | Protocol",
   },
   description: "A serious framework for tracking habits. Build consistent habits, track your progress, and achieve your goals with Protocol.",
-  keywords: ["habit tracker", "habit tracking", "productivity", "goal setting", "self improvement", "daily habits", "streaks", "PWA"],
+  keywords: ["habit tracker", "habit tracking", "productivity", "goal setting", "self improvement", "daily habits", "streaks", "PWA", "discipline", "goal tracking", "discipline system"],
   authors: [{ name: "Ebenezer (NexDev)" }],
   creator: "NexDev",
   publisher: "Ebenezer | NexDev",
@@ -22,20 +22,20 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://protocol-nex.vercel.app",
     siteName: "Protocol",
-    title: "Protocol - Personal Habit Tracker",
+    title: "Protocol - Personal Discipline System",
     description: "A serious framework for tracking habits. Build consistent habits, track your progress, and achieve your goals.",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Protocol - Personal Habit Tracker",
+        alt: "Protocol - Personal Discipline System",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Protocol - Personal Habit Tracker",
+    title: "Protocol - Personal Discipline System",
     description: "A serious framework for tracking habits. Build consistent habits, track your progress, and achieve your goals.",
     images: ["/og-image.png"],
   },

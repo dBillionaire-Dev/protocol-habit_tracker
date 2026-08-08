@@ -36,9 +36,9 @@ export function LayoutShell({ children }: LayoutShellProps) {
           </Link>
 
           <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               className="text-muted-foreground hover:text-foreground"
               onClick={() => logout()}
             >

@@ -17,7 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import type { HabitWithStatus } from "@/types/schema";
+import type { HabitWithStatus } from "shared/schema";
 import { 
   useLogHabitEvent, 
   useConfirmCleanDay, 

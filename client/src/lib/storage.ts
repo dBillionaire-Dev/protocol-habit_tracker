@@ -1,30 +1,40 @@
 import { db } from "./db";
 import {
   habits, habitEvents, dailyHabitStatus, habitDebts,
-  type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,
+  type InsertHabit, type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,
   type CreateHabitRequest, type HabitWithStatus,
-} from "../types/schema";
-import { users, type User, type UpsertUser } from "../types/auth";
+  users, type User, type UpsertUser
+} from "shared/schema";
 import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
 
 export interface IStorage {
+  // Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserPreferences(userId: string, prefs: { showOnboarding?: string }): Promise<void>;
+
+  // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
   getHabit(id: number): Promise<Habit | undefined>;
   createHabit(userId: string, habit: CreateHabitRequest): Promise<Habit>;
   deleteHabit(id: number, userId: string): Promise<void>;
+  
+  // Avoidance
   logHabitEvent(habitId: number, notes?: string): Promise<HabitEvent>;
   confirmCleanDay(habitId: number, date: string): Promise<{ debt: number }>;
   getTodayEventCount(habitId: number, date: string): Promise<number>;
+  
+  // Build
   getDailyStatus(habitId: number, date: string): Promise<DailyHabitStatus | undefined>;
   completeDailyTask(habitId: number, date: string, completed: boolean): Promise<DailyHabitStatus>;
   calculatePenaltyLevel(habitId: number, date: string): Promise<number>;
+  
+  // Streaks
   updateStreak(habitId: number, date: string, isSuccess: boolean): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
+  // Auth Implementation
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -54,6 +64,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
+  // Habit Implementation
   async getHabits(userId: string): Promise<HabitWithStatus[]> {
     const userHabits = await db.select().from(habits).where(eq(habits.userId, userId));
     const today = new Date().toISOString().split('T')[0];
@@ -69,12 +80,14 @@ export class DatabaseStorage implements IStorage {
         h.todayEvents = await this.getTodayEventCount(habit.id, today);
         h.todayConfirmed = debt?.lastCleanDate === today;
       } else {
+        // Build habit logic
         const penalty = await this.calculatePenaltyLevel(habit.id, today);
         h.penaltyLevel = penalty;
         h.todayTask = (habit.baseTaskValue || 0) + ((habit.baseTaskValue || 0) * penalty);
         
         const status = await this.getDailyStatus(habit.id, today);
         h.todayCompleted = status?.completed ?? false;
+        // Check if marked as missed (has status record but not completed)
         h.todayMissed = status ? !status.completed : false;
       }
       results.push(h);
@@ -113,6 +126,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(habits).where(eq(habits.id, id));
   }
 
+  // Avoidance
   async getTodayEventCount(habitId: number, date: string): Promise<number> {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -133,10 +147,12 @@ export class DatabaseStorage implements IStorage {
   async logHabitEvent(habitId: number, notes?: string): Promise<HabitEvent> {
     const [event] = await db.insert(habitEvents).values({ habitId, notes }).returning();
     
+    // Increment debt
     await db.execute(
       sql`UPDATE habit_debts SET debt_count = debt_count + 1 WHERE habit_id = ${habitId}`
     );
     
+    // Reset streak when event is logged (failure for avoidance)
     const habit = await this.getHabit(habitId);
     if (habit) {
       await db.update(habits)
@@ -154,6 +170,7 @@ export class DatabaseStorage implements IStorage {
       return { debt: debtRecord.debtCount };
     }
 
+    // Reduce debt by 1, min 0
     const [updated] = await db.update(habitDebts)
       .set({ 
         debtCount: sql`GREATEST(0, debt_count - 1)`,
@@ -162,11 +179,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(habitDebts.habitId, habitId))
       .returning();
     
+    // Update streak for successful clean day
     await this.updateStreak(habitId, date, true);
       
     return { debt: updated.debtCount };
   }
 
+  // Build
   async getDailyStatus(habitId: number, date: string): Promise<DailyHabitStatus | undefined> {
     const [status] = await db.select()
       .from(dailyHabitStatus)
@@ -177,6 +196,7 @@ export class DatabaseStorage implements IStorage {
   async completeDailyTask(habitId: number, date: string, completed: boolean): Promise<DailyHabitStatus> {
     const penaltyLevel = await this.calculatePenaltyLevel(habitId, date);
     
+    // Check if status exists
     const existing = await this.getDailyStatus(habitId, date);
     
     let status: DailyHabitStatus;
@@ -193,6 +213,7 @@ export class DatabaseStorage implements IStorage {
       status = inserted;
     }
     
+    // Update streak
     await this.updateStreak(habitId, date, completed);
       
     return status;
@@ -202,11 +223,13 @@ export class DatabaseStorage implements IStorage {
     const habit = await this.getHabit(habitId);
     if (!habit) return 0;
     
+    // Check if habit was created today - no penalty on creation day
     const createdDate = new Date(habit.createdAt).toISOString().split('T')[0];
     if (createdDate === today) {
       return 0;
     }
     
+    // Get last completed status before today
     const [lastCompleted] = await db.select()
       .from(dailyHabitStatus)
       .where(and(
@@ -218,18 +241,22 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     if (lastCompleted) {
+      // Calculate days since last completion
       const lastDate = new Date(lastCompleted.date);
       const todayDate = new Date(today);
       const diffTime = todayDate.getTime() - lastDate.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      // If completed yesterday (diff 1), penalty 0
       return Math.max(0, diffDays - 1);
     } else {
+      // Never completed - count days since creation (excluding creation day)
       const created = new Date(habit.createdAt);
       created.setHours(0, 0, 0, 0);
       const todayDate = new Date(today);
       todayDate.setHours(0, 0, 0, 0);
       const diffTime = todayDate.getTime() - created.getTime();
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      // Created yesterday means 1 day passed, so 1 penalty
       return Math.max(0, diffDays);
     }
   }
@@ -239,14 +266,16 @@ export class DatabaseStorage implements IStorage {
     if (!habit) return;
     
     if (isSuccess) {
+      // Check if this is consecutive
       const yesterday = new Date(date);
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
       
       let newStreak = 1;
-      let currentStreakStart = date;
+      let currentStreakStart = date; // Default: streak starts today
       
       if (habit.lastStreakDate === yesterdayStr) {
+        // Continuing streak
         newStreak = habit.currentStreak + 1;
         currentStreakStart = habit.currentStreakStart || date;
       }
@@ -261,22 +290,24 @@ export class DatabaseStorage implements IStorage {
         currentStreakStart,
       };
       
+      // Update longest streak dates if this is a new record
       if (isNewLongest) {
         updateData.longestStreakStart = currentStreakStart;
-        updateData.longestStreakEnd = null;
+        updateData.longestStreakEnd = null; // Still active
       }
       
       await db.update(habits)
         .set(updateData)
         .where(eq(habits.id, habitId));
     } else {
+      // Streak broken - record the end date of longest if it was the current streak
       const habit = await this.getHabit(habitId);
       if (habit && habit.currentStreak === habit.longestStreak && habit.currentStreak > 0) {
         await db.update(habits)
           .set({ 
             currentStreak: 0,
             currentStreakStart: null,
-            longestStreakEnd: habit.lastStreakDate
+            longestStreakEnd: habit.lastStreakDate // Record when it ended
           })
           .where(eq(habits.id, habitId));
       } else {

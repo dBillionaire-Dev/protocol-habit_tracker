@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
+import { apiFetch, isGuestMode, setGuestMode } from "@/lib/api";
 
 interface AuthUser {
   id: string;
-  email: string;
+  email: string | null;
   firstName: string | null;
   lastName: string | null;
   profileImageUrl: string | null;
@@ -13,65 +16,60 @@ interface AuthUser {
 }
 
 async function fetchUser(): Promise<AuthUser | null> {
-  const response = await fetch("/api/auth/user", {
-    credentials: "include",
-  });
+  const response = await apiFetch("/api/auth/user");
 
   if (response.status === 401) {
     return null;
   }
-
   if (!response.ok) {
     throw new Error(`${response.status}: ${response.statusText}`);
   }
-
   return response.json();
 }
 
 async function logout(): Promise<void> {
-  const response = await fetch("/api/auth/logout", {
-    method: "POST",
-    credentials: "include",
-  });
+  const wasGuest = isGuestMode();
+  setGuestMode(false);
 
-  if (!response.ok) {
-    throw new Error("Logout failed");
+  if (!wasGuest) {
+    const supabase = createClient();
+    await supabase.auth.signOut();
   }
 
-  // Redirect to home
+  await apiFetch("/api/auth/logout", { method: "POST" });
   window.location.href = "/";
 }
 
 async function loginAsGuest(): Promise<AuthUser> {
-  const response = await fetch("/api/auth/guest", {
-    method: "POST",
-    credentials: "include",
-  });
-
+  setGuestMode(true);
+  const response = await apiFetch("/api/auth/guest", { method: "POST" });
   if (!response.ok) {
     throw new Error("Failed to login as guest");
   }
-
   return response.json();
 }
 
-async function loginWithEmail(
-  email: string,
-  password: string,
-): Promise<AuthUser> {
-  const response = await fetch("/api/auth/email/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password }),
+/**
+ * Kicks off Supabase's hosted Google OAuth flow. Supabase redirects back to
+ * /auth/callback with a code, which a Route Handler exchanges for a
+ * session (see app/auth/callback/route.ts). No manual token handling here.
+ */
+async function loginWithGoogle(): Promise<void> {
+  setGuestMode(false);
+  const supabase = createClient();
+  await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
   });
+}
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Login failed");
-  }
-
-  return response.json();
+async function loginWithEmail(email: string, password: string): Promise<void> {
+  setGuestMode(false);
+  const supabase = createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
 }
 
 async function signupWithEmail(
@@ -79,28 +77,32 @@ async function signupWithEmail(
   password: string,
   firstName?: string,
   lastName?: string,
-): Promise<AuthUser> {
-  const response = await fetch("/api/auth/email/signup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email, password, firstName, lastName }),
+): Promise<void> {
+  setGuestMode(false);
+  const supabase = createClient();
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { first_name: firstName, last_name: lastName } },
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Signup failed");
-  }
-
-  return response.json();
-}
-
-async function loginWithGoogle(): Promise<void> {
-  window.location.href = "/api/auth/google";
+  if (error) throw new Error(error.message);
 }
 
 export function useAuth() {
   const queryClient = useQueryClient();
+
+  // Keep react-query's cached user in sync with Supabase auth state
+  // changes (e.g. session refresh, sign-out in another tab).
+  useEffect(() => {
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    });
+    return () => subscription.unsubscribe();
+  }, [queryClient]);
+
   const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
@@ -119,7 +121,6 @@ export function useAuth() {
     mutationFn: loginAsGuest,
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/auth/user"], data);
-
       window.location.href = "/dashboard";
     },
   });
@@ -127,8 +128,8 @@ export function useAuth() {
   const emailLoginMutation = useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       loginWithEmail(email, password),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["/api/auth/user"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
   });
 
@@ -144,8 +145,8 @@ export function useAuth() {
       firstName?: string;
       lastName?: string;
     }) => signupWithEmail(email, password, firstName, lastName),
-    onSuccess: (data) => {
-      queryClient.setQueryData(["/api/auth/user"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
   });
 

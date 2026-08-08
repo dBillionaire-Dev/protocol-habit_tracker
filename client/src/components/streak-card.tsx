@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-import type { HabitWithStatus } from "@/types/schema";
+import type { HabitWithStatus } from "shared/schema";
 
 interface StreakCardProps {
   habits: HabitWithStatus[];

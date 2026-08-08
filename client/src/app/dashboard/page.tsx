@@ -14,7 +14,8 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useHabits } from "@/hooks/use-habits";
-import type { HabitWithStatus } from "@/types/schema";
+import { apiFetch } from "@/lib/api";
+import type { HabitWithStatus } from "shared/schema";
 
 export default function DashboardPage() {
   const { data: habits, isLoading, error, refetch } = useHabits();
@@ -27,7 +28,7 @@ export default function DashboardPage() {
   const { data: user } = useQuery({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
-      const res = await fetch("/api/auth/user", { credentials: "include" });
+      const res = await apiFetch("/api/auth/user");
       if (!res.ok) return null;
       return res.json();
     },
@@ -36,11 +37,9 @@ export default function DashboardPage() {
   // Mutation to update onboarding preference
   const updatePrefs = useMutation({
     mutationFn: async (showOnboarding: string) => {
-      const res = await fetch("/api/user/preferences", {
+      const res = await apiFetch("/api/user/preferences", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ showOnboarding }),
-        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to update preferences");
       return res.json();

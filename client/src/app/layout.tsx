@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { queryClient } from "@/lib/queryClient";
 import { ServiceWorkerProvider } from "@/components/service-worker-provider";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -83,6 +84,7 @@ export default function RootLayout({
             <TooltipProvider>
               <Toaster />
               {children}
+              <PWAInstallPrompt />
             </TooltipProvider>
           </QueryClientProvider>
         </ServiceWorkerProvider>

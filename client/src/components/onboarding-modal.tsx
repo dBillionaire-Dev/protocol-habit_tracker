@@ -51,9 +51,9 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
                     These are habits you must actively do. Examples: studying, coding, exercising.
                   </p>
                   <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                    <li>You must execute the habit's protocol within its time window</li>
-                    <li>Executing a protocol: This means the protocol was strictly adhered to and it increases your streak, reduces any existing debt</li>
-                    <li>Missing a protocol and failure to confirm (execute the protocol) at the end of the day during the confirmation window: Automatically breaks the streak, and increases debt</li>
+                    <li>You must execute the habit's protocol within its time window.</li>
+                    <li>Executing a protocol: This means the protocol was strictly adhered to and it increases your streak, reduces any existing debt.</li>
+                    <li>Missing a protocol and failure to confirm (execute the protocol) at the end of the day during the confirmation window: Automatically breaks the streak, and increases debt. </li>
                     <li>Any unpaid debt is carried over to the next day and added to that day's normal requirement. For example, 1 missed protocol creates 1 debt, making the next day's requirement 2 protocols.</li>
                   </ul>
                 </div>
@@ -64,10 +64,10 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
                     These are habits you must avoid completely. Examples: no junk food, no smoking, no doomscrolling on social media.
                   </p>
                   <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
-                    <li>You must log an event every time the avoided habit occurs</li>
-                    <li>If you avoid the habit for the entire day: The day is confirmed as a <strong>Clean Day</strong>, and your streak increases</li>
-                    <li>If you perform the habit or log an event for it: The streak breaks immediately and debt increases</li>
-                    <li>Debt is paid off through clean days: <strong>1 Clean Day = 1 debt paid</strong></li>
+                    <li>You must log an event every time the avoided habit occurs.</li>
+                    <li>If you avoid the habit for the entire day: The day is confirmed as a <strong>Clean Day</strong>, and your streak increases.</li>
+                    <li>If you perform the habit or log an event for it: The streak breaks immediately and debt increases.</li>
+                    <li>Debt is paid off through clean days: <strong>1 Clean Day = 1 debt paid</strong>.</li>
                   </ul>
                 </div>
               </CardContent>
@@ -80,8 +80,8 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
               <CardContent className="text-sm text-muted-foreground space-y-2">
                 <p>Every day has a <strong>confirmation window</strong>.</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>When the window is open: You will see "Window Open" with a countdown timer</li>
-                  <li>During this time: Building habits are confirmed as completed, Avoidance habits are confirmed as clean days</li>
+                  <li>When the window is open: You will see "Window Open" with a countdown timer.</li>
+                  <li>During this time: Building habits are confirmed as completed, Avoidance habits are confirmed as clean days.</li>
                 </ul>
                 <p className="text-orange-500">Missing the confirmation window may affect your streak and debt.</p>
               </CardContent>
@@ -93,9 +93,9 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Each habit has its <strong>own streak</strong></li>
-                  <li>Streaks are habit-specific and independent of other habits</li>
-                  <li>Longest streaks are stored permanently and do not reset when you break a streak</li>
+                  <li>Each habit has its <strong>own streak.</strong></li>
+                  <li>Streaks are habit-specific and independent of other habits.</li>
+                  <li>Longest streaks are stored permanently and do not reset when you break a streak.</li>
                 </ul>
               </CardContent>
             </Card>
@@ -107,8 +107,8 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
               <CardContent className="text-sm text-muted-foreground">
                 <p className="mb-2">Debt represents missed responsibility.</p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
-                  <li>Debt increases when: A protocol is missed, or an avoidance habit is violated</li>
-                  <li>Debt decreases when: Protocols are executed, or clean days are confirmed</li>
+                  <li>Debt increases when: A protocol is missed, or an avoidance habit is violated.</li>
+                  <li>Debt decreases when: Protocols are executed, or clean days are confirmed.</li>
                 </ul>
                 <p className="mt-2">Debt is tracked <strong>per habit</strong>, not globally.</p>
               </CardContent>

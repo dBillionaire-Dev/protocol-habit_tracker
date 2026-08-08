@@ -9,9 +9,6 @@ const nextConfig = {
     // node_modules by default, so it needs to be told to for this one.
     transpilePackages: ["shared"],
 
-    // Fix turbopack build issues
-    output: "standalone",
-
     turbopack: {
         // `client` is an npm workspace member now (see root package.json),
         // so `next` and shared deps get hoisted to the repo root's

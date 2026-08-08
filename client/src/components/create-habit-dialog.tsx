@@ -79,7 +79,7 @@ export function CreateHabitDialog() {
           <span className="font-medium">Initialize Protocol</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New Protocol</DialogTitle>
         </DialogHeader>

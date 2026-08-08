@@ -12,6 +12,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserPreferences(userId: string, prefs: { showOnboarding?: string }): Promise<void>;
+  deleteUserAccount(userId: string): Promise<void>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -62,6 +63,31 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date() 
       })
       .where(eq(users.id, userId));
+  }
+
+  async deleteUserAccount(userId: string): Promise<void> {
+    // No DB-level cascade is configured on these FKs, so dependent rows
+    // have to go first, in dependency order, before the habits and the
+    // profile row itself. All within one transaction so a failure partway
+    // through doesn't leave the account half-deleted.
+    await db.transaction(async (tx) => {
+      const userHabits = await tx
+        .select({ id: habits.id })
+        .from(habits)
+        .where(eq(habits.userId, userId));
+      const habitIds = userHabits.map((h) => h.id);
+
+      if (habitIds.length > 0) {
+        for (const habitId of habitIds) {
+          await tx.delete(habitEvents).where(eq(habitEvents.habitId, habitId));
+          await tx.delete(dailyHabitStatus).where(eq(dailyHabitStatus.habitId, habitId));
+          await tx.delete(habitDebts).where(eq(habitDebts.habitId, habitId));
+        }
+        await tx.delete(habits).where(eq(habits.userId, userId));
+      }
+
+      await tx.delete(users).where(eq(users.id, userId));
+    });
   }
 
   // Habit Implementation

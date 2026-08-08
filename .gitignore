@@ -56,8 +56,5 @@ temp/
 .cache
 
 #Mock Files
-.replit
 attached_assets/
-vite.config.ts*.tsbuildinfo
-apply-migration.sh
-protocol-migration.patch
+*.tsbuildinfo

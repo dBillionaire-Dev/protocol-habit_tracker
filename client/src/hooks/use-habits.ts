@@ -2,18 +2,24 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type InsertHabit, type HabitWithStatus } from "shared/schema";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, isGuestMode } from "@/lib/api";
+import { guestStorage } from "@/lib/guest-storage";
 
 function getDeleteUrl(id: number): string { return `/api/habits/${id}`; }
 function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`; }
 function getConfirmCleanDayUrl(id: number): string { return `/api/habits/${id}/clean-day`; }
 function getCompleteDailyUrl(id: number): string { return `/api/habits/${id}/complete`; }
 
-// GET /api/habits
+// GET /api/habits — or, in guest mode, read straight from localStorage.
+// Nothing about a guest session ever touches the database.
 export function useHabits() {
   return useQuery({
     queryKey: ["/api/habits"],
     queryFn: async () => {
+      if (isGuestMode()) {
+        return guestStorage.getHabits();
+      }
+
       const res = await apiFetch("/api/habits");
       if (res.status === 401) throw new Error("Unauthorized");
       if (!res.ok) throw new Error("Failed to fetch habits");
@@ -29,6 +35,10 @@ export function useCreateHabit() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (habit: InsertHabit) => {
+      if (isGuestMode()) {
+        return guestStorage.createHabit(habit);
+      }
+
       const res = await apiFetch("/api/habits", {
         method: "POST",
         body: JSON.stringify(habit),
@@ -48,6 +58,10 @@ export function useDeleteHabit() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => {
+      if (isGuestMode()) {
+        return guestStorage.deleteHabit(id);
+      }
+
       const res = await apiFetch(getDeleteUrl(id), { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete habit");
     },
@@ -62,6 +76,10 @@ export function useLogHabitEvent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, notes }: { id: number; notes?: string }) => {
+      if (isGuestMode()) {
+        return guestStorage.logHabitEvent(id, notes);
+      }
+
       const res = await apiFetch(getLogEventUrl(id), {
         method: "POST",
         body: JSON.stringify({ notes }),
@@ -80,6 +98,10 @@ export function useConfirmCleanDay() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
+      if (isGuestMode()) {
+        return guestStorage.confirmCleanDay(id, date);
+      }
+
       const res = await apiFetch(getConfirmCleanDayUrl(id), {
         method: "POST",
         body: JSON.stringify({ date }),
@@ -98,6 +120,10 @@ export function useCompleteDaily() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date, completed }: { id: number; date: string; completed: boolean }) => {
+      if (isGuestMode()) {
+        return guestStorage.completeDailyTask(id, date, completed);
+      }
+
       const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
         body: JSON.stringify({ date, completed }),
@@ -116,6 +142,10 @@ export function useMarkMissed() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
+      if (isGuestMode()) {
+        return guestStorage.completeDailyTask(id, date, false);
+      }
+
       const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
         body: JSON.stringify({ date, completed: false }),

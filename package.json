@@ -1,20 +1,16 @@
 {
   "name": "protocol-root",
   "private": true,
-  "workspaces": {
-    "packages": [
-      "client"
-    ]
-  },
   "scripts": {
-    "dev": "npm --workspace client run dev",
-    "build": "npm --workspace client run build",
-    "start": "npm --workspace client run start",
+    "dev": "pnpm --filter ./client dev",
+    "build": "pnpm --filter ./client build",
+    "start": "pnpm --filter ./client start",
     "db:push": "dotenv -e client/.env -- drizzle-kit push",
     "db:studio": "dotenv -e client/.env -- drizzle-kit studio"
   },
   "devDependencies": {
-    "dotenv-cli": "^11.0.0"
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.31.8"
   },
   "dependencies": {
     "drizzle-orm": "^0.39.3",

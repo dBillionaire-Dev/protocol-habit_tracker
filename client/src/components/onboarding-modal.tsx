@@ -29,7 +29,7 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
     <Dialog open={open} onOpenChange={() => handleClose()}>
       <DialogContent className="flex h-[90vh] max-h-[90vh] flex-col sm:max-w-2xl">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="text-xl">Welcome to the Protocol Habit System</DialogTitle>
+          <DialogTitle className="text-xl">Welcome to the Protocol Discipline System</DialogTitle>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-hidden">

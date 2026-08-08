@@ -79,10 +79,11 @@ export function CreateHabitDialog() {
           <span className="font-medium">Initialize Protocol</span>
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[425px] max-h-[85vh] p-0 gap-0 flex flex-col">
+        <DialogHeader className="p-6 pb-4 shrink-0">
           <DialogTitle>New Protocol</DialogTitle>
         </DialogHeader>
+        <div className="overflow-y-auto min-h-0 px-6 pb-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -162,6 +163,7 @@ export function CreateHabitDialog() {
             </Button>
           </form>
         </Form>
+        </div>
       </DialogContent>
     </Dialog>
   );

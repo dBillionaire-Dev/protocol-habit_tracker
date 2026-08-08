@@ -19,7 +19,7 @@ function calculateWindowState(): WindowState {
   const seconds = now.getSeconds();
 
   // Window is 11:00 PM (23:00) to 12:00 AM (00:00)
-  const isWindowOpen = hours === 23;
+  const isWindowOpen = hours === 21;
 
   let timeUntilWindow: { hours: number; minutes: number; seconds: number } | null = null;
   let timeRemaining: { hours: number; minutes: number; seconds: number } | null = null;
@@ -33,7 +33,7 @@ function calculateWindowState(): WindowState {
       seconds: remainingSeconds,
     };
   } else {
-    let hoursUntil = 23 - hours;
+    let hoursUntil = 21 - hours;
     let minutesUntil = 60 - minutes;
     let secondsUntil = 60 - seconds;
 
@@ -121,8 +121,8 @@ export function DayConfirmationCard({ onRefresh, className }: DayConfirmationCar
   return (
     <Card className={cn(
       "transition-all",
-      isWindowOpen 
-        ? "border-emerald-500/50 bg-emerald-500/5" 
+      isWindowOpen
+        ? "border-emerald-500/50 bg-emerald-500/5"
         : "border-muted",
       className
     )}>
@@ -140,10 +140,10 @@ export function DayConfirmationCard({ onRefresh, className }: DayConfirmationCar
             </div>
             <div>
               <p className="font-semibold text-sm">Day Confirmation</p>
-              <p className="text-xs text-muted-foreground">Window: 11:00 PM - 12:00 AM</p>
+              <p className="text-xs text-muted-foreground">Window: 09:00 PM - 12:00 AM</p>
             </div>
           </div>
-          
+
           <div className="text-right">
             {isWindowOpen ? (
               <div className="flex items-center gap-2">

@@ -27,17 +27,18 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={() => handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="text-xl">Welcome to the Habit Protocol System</DialogTitle>
+      <DialogContent className="flex h-[90vh] max-h-[90vh] flex-col sm:max-w-2xl">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="text-xl">Welcome to the Protocol Habit System</DialogTitle>
         </DialogHeader>
-        
-        <ScrollArea className="flex-1 pr-4">
-          <div className="space-y-6 pb-4">
-            <p className="text-muted-foreground">
-              This app is built to enforce discipline, not just track habits.
-              Everything works on <strong>protocols, streaks, debt, and daily confirmation windows</strong>.
-            </p>
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full w-full pr-4">
+            <div className="space-y-6 pb-4">
+              <p className="text-muted-foreground">
+                This app is built to enforce discipline, not just track habits.
+                Everything works on <strong>protocols, streaks, debt, and daily confirmation windows</strong>.
+              </p>
 
             <Card>
               <CardHeader className="pb-2">
@@ -59,7 +60,7 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
                 <div>
                   <h4 className="font-semibold text-destructive">2. Avoidance Habits</h4>
                   <p className="text-muted-foreground mb-2">
-                    These are habits you must avoid completely. Examples: no junk food, no gambling, no smoking.
+                    These are habits you must avoid completely. Examples: no junk food, no smoking, no doomscrolling on social media.
                   </p>
                   <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-2">
                     <li>You log actions for these habits every time it occurs</li>
@@ -120,7 +121,8 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
               </CardContent>
             </Card>
           </div>
-        </ScrollArea>
+          </ScrollArea>
+        </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-4 pt-4 border-t">
           <div className="flex items-center space-x-2">

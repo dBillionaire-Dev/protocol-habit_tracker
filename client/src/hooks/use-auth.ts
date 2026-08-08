@@ -180,6 +180,7 @@ export function useAuth() {
           lastName: user.lastName,
           profileImageUrl: user.profileImageUrl,
           showOnboarding: user.showOnboarding,
+          provider: user.provider,
         }
       : null,
     isLoading,

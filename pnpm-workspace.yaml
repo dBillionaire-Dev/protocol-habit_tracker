@@ -1,0 +1,10 @@
+packages:
+  - "client"
+  - "shared"
+
+# esbuild (a drizzle-kit dependency) needs to run its install script to
+# fetch its platform binary. pnpm blocks all postinstall scripts by
+# default for supply-chain safety, so it has to be explicitly allowlisted.
+# (pnpm 10 and earlier: use `onlyBuiltDependencies` instead of `allowBuilds`.)
+allowBuilds:
+  esbuild: true

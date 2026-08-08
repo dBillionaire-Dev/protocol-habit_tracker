@@ -12,51 +12,40 @@ interface WindowState {
   lastCalculated: number;
 }
 
+function msToHMS(diffMs: number): { hours: number; minutes: number; seconds: number } {
+  const totalSeconds = Math.max(0, Math.floor(diffMs / 1000));
+  return {
+    hours: Math.floor(totalSeconds / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
+  };
+}
+
 function calculateWindowState(): WindowState {
   const now = new Date();
   const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const seconds = now.getSeconds();
 
-  // Window is 11:00 PM (23:00) to 12:00 AM (00:00)
-  const isWindowOpen = hours === 21;
+  // Window is 9:00 PM (21:00) through 12:00 AM (00:00) — a 3-hour span
+  // covering hours 21, 22, and 23. (hours === 21) only matched the first
+  // of those three hours, which is why the countdown used to stop working
+  // correctly after 10 PM.
+  const isWindowOpen = hours >= 21 && hours <= 23;
 
-  let timeUntilWindow: { hours: number; minutes: number; seconds: number } | null = null;
-  let timeRemaining: { hours: number; minutes: number; seconds: number } | null = null;
+  let timeUntilWindow: WindowState["timeUntilWindow"] = null;
+  let timeRemaining: WindowState["timeRemaining"] = null;
 
   if (isWindowOpen) {
-    const remainingMinutes = 59 - minutes;
-    const remainingSeconds = 59 - seconds;
-    timeRemaining = {
-      hours: 0,
-      minutes: remainingMinutes,
-      seconds: remainingSeconds,
-    };
+    // Count down to the next midnight, not the next top-of-hour.
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    timeRemaining = msToHMS(midnight.getTime() - now.getTime());
   } else {
-    let hoursUntil = 21 - hours;
-    let minutesUntil = 60 - minutes;
-    let secondsUntil = 60 - seconds;
-
-    if (minutesUntil === 60) {
-      minutesUntil = 0;
-    } else {
-      hoursUntil -= 1;
-    }
-    if (secondsUntil === 60) {
-      secondsUntil = 0;
-    } else if (minutesUntil > 0) {
-      minutesUntil -= 1;
-    }
-
-    if (hoursUntil < 0) {
-      hoursUntil += 24;
-    }
-
-    timeUntilWindow = {
-      hours: hoursUntil,
-      minutes: minutesUntil,
-      seconds: secondsUntil,
-    };
+    // Count up to 9 PM today. Since isWindowOpen already covers hours
+    // 21-23, every hour that reaches this branch (0-20) is before 9 PM
+    // on the same day, so there's no midnight-wraparound case to handle.
+    const windowStart = new Date(now);
+    windowStart.setHours(21, 0, 0, 0);
+    timeUntilWindow = msToHMS(windowStart.getTime() - now.getTime());
   }
 
   return {

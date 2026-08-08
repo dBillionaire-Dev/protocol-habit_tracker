@@ -153,12 +153,15 @@ function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
     dailyStatuses: _dailyStatuses,
     debtCount,
     lastCleanDate,
+    createdAt,
     ...base
   } = habit;
 
+  const withDate = { ...base, createdAt: new Date(createdAt) };
+
   if (habit.type === "avoidance") {
     return {
-      ...base,
+      ...withDate,
       debt: debtCount,
       todayEvents: getTodayEventCount(habit, today),
       todayConfirmed: lastCleanDate === today,
@@ -168,7 +171,7 @@ function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
   const penaltyLevel = calculatePenaltyLevel(habit, today);
   const status = getDailyStatus(habit, today);
   return {
-    ...base,
+    ...withDate,
     penaltyLevel,
     todayTask: (habit.baseTaskValue || 0) + (habit.baseTaskValue || 0) * penaltyLevel,
     todayCompleted: status?.completed ?? false,

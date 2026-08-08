@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    "./schema": "./schema.js",
-    "./routes": "./routes.js",
-    "./models/auth": "./models/auth.js"
+    "./schema": "./schema.ts",
+    "./models/auth": "./models/auth.ts"
   }
 }

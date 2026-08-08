@@ -1,10 +1,10 @@
 import { pgTable, text, serial, integer, boolean, timestamp, date, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { users } from "./models/auth.js";
+import { users } from "./models/auth";
 
 // Export auth tables
-export * from "./models/auth.js";
+export * from "./models/auth";
 
 // Habit Types
 export const HABIT_TYPES = ["avoidance", "build"] as const;

@@ -48,8 +48,8 @@ Preferred communication style: Simple, everyday language.
 - **Storage**: Supabase Storage (planned, for future file/image uploads)
 
 ### Authentication
-- **Primary**: Supabase Auth — Google OAuth (hosted flow, redirects through `/auth/callback`)
-- **Secondary**: Supabase Auth — email/password
+- **Primary**: Supabase Auth - Google OAuth (hosted flow, redirects through `/auth/callback`)
+- **Secondary**: Supabase Auth - email/password
 - **Guest Mode**: Stateless demo user, no Supabase session or DB row required
 
 ```

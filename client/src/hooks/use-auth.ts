@@ -40,6 +40,16 @@ async function logout(): Promise<void> {
   window.location.href = "/";
 }
 
+async function deleteAccount(): Promise<void> {
+  const response = await apiFetch("/api/auth/user", { method: "DELETE" });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || "Failed to delete account");
+  }
+  setGuestMode(false);
+  window.location.href = "/";
+}
+
 async function loginAsGuest(): Promise<AuthUser> {
   setGuestMode(true);
   const response = await apiFetch("/api/auth/guest", { method: "POST" });
@@ -117,6 +127,13 @@ export function useAuth() {
     },
   });
 
+  const deleteAccountMutation = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/auth/user"], null);
+    },
+  });
+
   const guestLoginMutation = useMutation({
     mutationFn: loginAsGuest,
     onSuccess: (data) => {
@@ -169,6 +186,9 @@ export function useAuth() {
     isAuthenticated: !!user,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+    deleteAccount: deleteAccountMutation.mutate,
+    isDeletingAccount: deleteAccountMutation.isPending,
+    deleteAccountError: deleteAccountMutation.error,
     loginAsGuest: guestLoginMutation.mutate,
     isGuestLoggingIn: guestLoginMutation.isPending,
     loginWithEmail: emailLoginMutation.mutate,

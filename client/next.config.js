@@ -4,6 +4,11 @@ const nextConfig = {
 
     allowedDevOrigins: ['192.168.0.199'],
 
+    // "shared" is a pnpm workspace package linked into node_modules as TS
+    // source (see shared/package.json exports). Next.js doesn't transpile
+    // node_modules by default, so it needs to be told to for this one.
+    transpilePackages: ["shared"],
+
     // Fix turbopack build issues
     output: "standalone",
 

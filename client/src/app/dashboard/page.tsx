@@ -132,18 +132,33 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-lg font-semibold">{format(today, "EEEE")}</p>
-              <p className="text-sm text-muted-foreground flex items-center gap-1 justify-end">
-                <Calendar className="w-3 h-3" />
-                {format(today, "MMMM d, yyyy")}
-              </p>
+            <div className="text-right order-2 sm:order-1">
+              {/* Desktop */}
+              <div className="hidden sm:block">
+                <p className="text-lg font-semibold">{format(today, "EEEE")}</p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1 justify-end">
+                  <Calendar className="w-3 h-3" />
+                  {format(today, "MMMM d, yyyy")}
+                </p>
+              </div>
+
+              {/* Mobile */}
+              <div className="flex sm:hidden items-center gap-1 text-sm">
+                <span className="font-semibold">
+                  {format(today, "EEE")} ·
+                </span>
+                <span className="text-muted-foreground">
+                  {format(today, "MMM d, yyyy")}
+                </span>
+              </div>
             </div>
+
             <Button
               variant="ghost"
               size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing}
+              className="order-1 sm:order-2"
             >
               <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
             </Button>

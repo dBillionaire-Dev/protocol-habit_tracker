@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LogOut, Shield, Trash2, Loader2, User as UserIcon } from "lucide-react";
+import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -24,6 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { useBillingStatus, useStartCheckout, useCancelSubscription } from "@/hooks/use-billing";
 
 interface LayoutShellProps {
   children: React.ReactNode;
@@ -38,10 +39,15 @@ function initials(firstName?: string | null, lastName?: string | null, email?: s
 
 export function LayoutShell({ children }: LayoutShellProps) {
   const { user, logout, deleteAccount, isDeletingAccount, deleteAccountError } = useAuth();
+  const { data: billing } = useBillingStatus();
+  const { mutate: startCheckout, isPending: isCheckingOut } = useStartCheckout();
+  const { mutate: cancelSubscription, isPending: isCancelling } = useCancelSubscription();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isGuest = user?.provider === "guest";
+  const isPro = billing?.plan === "pro";
   const displayName =
     user?.firstName || user?.lastName
       ? `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
@@ -80,7 +86,15 @@ export function LayoutShell({ children }: LayoutShellProps) {
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none truncate">{displayName}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium leading-none truncate">{displayName}</p>
+                    {isPro && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                        <Crown className="w-3 h-3" />
+                        Pro
+                      </span>
+                    )}
+                  </div>
                   {!isGuest && user?.email && (
                     <p className="text-xs leading-none text-muted-foreground truncate">
                       {user.email}
@@ -94,6 +108,32 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {!isGuest && !isPro && (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    startCheckout();
+                  }}
+                  disabled={isCheckingOut}
+                  data-testid="menu-item-upgrade"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {isCheckingOut ? "Redirecting..." : "Upgrade to Pro"}
+                </DropdownMenuItem>
+              )}
+              {!isGuest && isPro && (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setMenuOpen(false);
+                    setCancelConfirmOpen(true);
+                  }}
+                  data-testid="menu-item-manage-subscription"
+                >
+                  <Crown className="w-4 h-4 mr-2" />
+                  Manage Subscription
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => logout()} data-testid="menu-item-sign-out">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
@@ -114,6 +154,41 @@ export function LayoutShell({ children }: LayoutShellProps) {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel Pro subscription?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  You'll keep Pro access until your current billing period
+                  ends, then drop back to the free plan (3 active
+                  protocols). Your existing protocols beyond the free
+                  limit won't be deleted, but you won't be able to create
+                  new ones until you're back under the limit or resubscribe.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isCancelling}>Keep Pro</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    cancelSubscription(undefined, { onSuccess: () => setCancelConfirmOpen(false) });
+                  }}
+                  disabled={isCancelling}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    "Cancel subscription"
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>

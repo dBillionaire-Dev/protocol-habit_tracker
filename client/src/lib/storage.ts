@@ -3,7 +3,8 @@ import {
   habits, habitEvents, dailyHabitStatus, habitDebts,
   type InsertHabit, type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,
   type CreateHabitRequest, type HabitWithStatus,
-  users, type User, type UpsertUser
+  users, type User, type UpsertUser,
+  subscriptions, type Subscription, type UpsertSubscription,
 } from "shared/schema";
 import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
 
@@ -13,6 +14,11 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserPreferences(userId: string, prefs: { showOnboarding?: string }): Promise<void>;
   deleteUserAccount(userId: string): Promise<void>;
+
+  // Billing
+  getSubscription(userId: string): Promise<Subscription | undefined>;
+  upsertSubscription(sub: UpsertSubscription): Promise<Subscription>;
+  countActiveHabits(userId: string): Promise<number>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -86,8 +92,35 @@ export class DatabaseStorage implements IStorage {
         await tx.delete(habits).where(eq(habits.userId, userId));
       }
 
+      await tx.delete(subscriptions).where(eq(subscriptions.userId, userId));
       await tx.delete(users).where(eq(users.id, userId));
     });
+  }
+
+  // Billing Implementation
+  async getSubscription(userId: string): Promise<Subscription | undefined> {
+    const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId));
+    return sub;
+  }
+
+  async upsertSubscription(sub: UpsertSubscription): Promise<Subscription> {
+    const [result] = await db
+      .insert(subscriptions)
+      .values(sub)
+      .onConflictDoUpdate({
+        target: subscriptions.userId,
+        set: { ...sub, updatedAt: new Date() },
+      })
+      .returning();
+    return result;
+  }
+
+  async countActiveHabits(userId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: count() })
+      .from(habits)
+      .where(eq(habits.userId, userId));
+    return result?.count ?? 0;
   }
 
   // Habit Implementation

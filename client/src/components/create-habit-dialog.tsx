@@ -30,7 +30,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { insertHabitSchema } from "shared/schema";
-import { useCreateHabit } from "@/hooks/use-habits";
+import { useCreateHabit, ApiError } from "@/hooks/use-habits";
+import { useStartCheckout } from "@/hooks/use-billing";
 import { z } from "zod";
 
 const formSchema = z.object({
@@ -44,7 +45,9 @@ type FormValues = z.infer<typeof formSchema>;
 
 export function CreateHabitDialog() {
   const [open, setOpen] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
   const { mutateAsync: createHabit, isPending } = useCreateHabit();
+  const { mutate: startCheckout, isPending: isCheckingOut } = useStartCheckout();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -63,14 +66,19 @@ export function CreateHabitDialog() {
       // @ts-ignore
       await createHabit(data);
       setOpen(false);
+      setLimitReached(false);
       form.reset();
     } catch (error) {
-      console.error(error);
+      if (error instanceof ApiError && error.code === "PLAN_LIMIT_REACHED") {
+        setLimitReached(true);
+      } else {
+        console.error(error);
+      }
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setLimitReached(false); }}>
       <DialogTrigger asChild>
         <button 
           className="w-full border border-dashed border-border rounded-lg p-4 text-center hover-elevate transition-all cursor-pointer flex items-center justify-center gap-2 bg-white text-black dark:bg-white dark:text-black"
@@ -81,9 +89,32 @@ export function CreateHabitDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px] max-h-[85vh] p-0 gap-0 flex flex-col">
         <DialogHeader className="p-6 pb-4 shrink-0">
-          <DialogTitle>New Protocol</DialogTitle>
+          <DialogTitle>{limitReached ? "Free Plan Limit Reached" : "New Protocol"}</DialogTitle>
         </DialogHeader>
         <div className="overflow-y-auto min-h-0 px-6 pb-6">
+        {limitReached ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              The free plan supports up to 3 active protocols. Upgrade to
+              Pro for unlimited protocols, streak analytics, and data
+              export.
+            </p>
+            <Button
+              className="w-full"
+              onClick={() => startCheckout()}
+              disabled={isCheckingOut}
+            >
+              {isCheckingOut ? "Redirecting..." : "Upgrade to Pro"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setLimitReached(false)}
+            >
+              Back
+            </Button>
+          </div>
+        ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
@@ -163,6 +194,7 @@ export function CreateHabitDialog() {
             </Button>
           </form>
         </Form>
+        )}
         </div>
       </DialogContent>
     </Dialog>

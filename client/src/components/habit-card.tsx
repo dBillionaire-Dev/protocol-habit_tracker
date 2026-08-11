@@ -18,12 +18,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { HabitWithStatus } from "shared/schema";
-import { 
-  useLogHabitEvent, 
-  useConfirmCleanDay, 
-  useCompleteDaily, 
-  useDeleteHabit, 
-  useMarkMissed 
+import {
+  useLogHabitEvent,
+  useConfirmCleanDay,
+  useCompleteDaily,
+  useDeleteHabit,
+  useMarkMissed
 } from "@/hooks/use-habits";
 import { useConfirmationWindow } from "@/components/day-confirmation-card";
 
@@ -85,7 +85,7 @@ export function HabitCard({ habit }: HabitCardProps) {
                 <span className="text-sm font-medium">{habit.currentStreak} day streak</span>
               </div>
             ) : null}
-            
+
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Today</p>
@@ -95,9 +95,9 @@ export function HabitCard({ habit }: HabitCardProps) {
                   <span className="text-orange-500 font-medium text-sm">{todayEvents} event{todayEvents !== 1 ? 's' : ''}</span>
                 )}
               </div>
-              
-              <Button 
-                variant="outline" 
+
+              <Button
+                variant="outline"
                 size="sm"
                 className="border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
                 onClick={() => logEventMutation.mutate({ id: habit.id })}
@@ -110,7 +110,7 @@ export function HabitCard({ habit }: HabitCardProps) {
           </CardContent>
           <CardFooter className="pt-0">
             {isConfirmed ? (
-              <Button 
+              <Button
                 className="flex-1 bg-emerald-600 hover:bg-emerald-600 text-white cursor-default"
                 disabled
               >
@@ -118,11 +118,11 @@ export function HabitCard({ habit }: HabitCardProps) {
                 Clean day confirmed
               </Button>
             ) : (
-              <Button 
+              <Button
                 className={cn(
                   "flex-1",
                   isWindowOpen && isClean
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white" 
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                     : "bg-muted text-muted-foreground cursor-not-allowed"
                 )}
                 onClick={() => confirmCleanMutation.mutate({ id: habit.id, date: today })}
@@ -138,8 +138,8 @@ export function HabitCard({ habit }: HabitCardProps) {
   }
 
   // Build Habit Card
-  const penaltyText = habit.penaltyLevel && habit.penaltyLevel > 0 
-    ? `Penalty stacked from ${habit.baseTaskValue} base` 
+  const penaltyText = habit.penaltyLevel && habit.penaltyLevel > 0
+    ? `Penalty stacked from ${habit.penaltyLevel} day${habit.penaltyLevel !== 1 ? "s" : ""} missed`
     : null;
 
   return (
@@ -194,14 +194,14 @@ export function HabitCard({ habit }: HabitCardProps) {
             </div>
           ) : isWindowOpen ? (
             <div className="flex gap-2 w-full">
-              <Button 
+              <Button
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => completeMutation.mutate({ id: habit.id, date: today, completed: true })}
                 disabled={completeMutation.isPending}
               >
                 Execute Protocol
               </Button>
-              <Button 
+              <Button
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
                 onClick={() => missedMutation.mutate({ id: habit.id, date: today })}
                 disabled={missedMutation.isPending}

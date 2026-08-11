@@ -43,9 +43,11 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+type LimitReason = "plan" | "guest" | null;
+
 export function CreateHabitDialog() {
   const [open, setOpen] = useState(false);
-  const [limitReached, setLimitReached] = useState(false);
+  const [limitReason, setLimitReason] = useState<LimitReason>(null);
   const { mutateAsync: createHabit, isPending } = useCreateHabit();
   const { mutate: startCheckout, isPending: isCheckingOut } = useStartCheckout();
 
@@ -66,11 +68,13 @@ export function CreateHabitDialog() {
       // @ts-ignore
       await createHabit(data);
       setOpen(false);
-      setLimitReached(false);
+      setLimitReason(null);
       form.reset();
     } catch (error) {
       if (error instanceof ApiError && error.code === "PLAN_LIMIT_REACHED") {
-        setLimitReached(true);
+        setLimitReason("plan");
+      } else if (error instanceof ApiError && error.code === "GUEST_LIMIT_REACHED") {
+        setLimitReason("guest");
       } else {
         console.error(error);
       }
@@ -78,9 +82,9 @@ export function CreateHabitDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setLimitReached(false); }}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setLimitReason(null); }}>
       <DialogTrigger asChild>
-        <button 
+        <button
           className="w-full border border-dashed border-border rounded-lg p-4 text-center hover-elevate transition-all cursor-pointer flex items-center justify-center gap-2 bg-white text-black dark:bg-white dark:text-black"
         >
           <Plus className="w-4 h-4" />
@@ -89,10 +93,16 @@ export function CreateHabitDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px] max-h-[85vh] p-0 gap-0 flex flex-col">
         <DialogHeader className="p-6 pb-4 shrink-0">
-          <DialogTitle>{limitReached ? "Free Plan Limit Reached" : "New Protocol"}</DialogTitle>
+          <DialogTitle>
+            {limitReason === "plan"
+              ? "Free Plan Limit Reached"
+              : limitReason === "guest"
+                ? "Guest Limit Reached"
+                : "New Protocol"}
+          </DialogTitle>
         </DialogHeader>
         <div className="overflow-y-auto min-h-0 px-6 pb-6">
-        {limitReached ? (
+        {limitReason === "plan" ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               The free plan supports up to 3 active protocols. Upgrade to
@@ -109,7 +119,30 @@ export function CreateHabitDialog() {
             <Button
               variant="ghost"
               className="w-full"
-              onClick={() => setLimitReached(false)}
+              onClick={() => setLimitReason(null)}
+            >
+              Back
+            </Button>
+          </div>
+        ) : limitReason === "guest" ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Guest sessions are limited to 1 protocol, so you can try
+              PROTOCOL out. Create a free account to track up to 3
+              protocols (or go Pro for unlimited). Nothing you've set up
+              as a guest carries over automatically, so make a note of it
+              first if you want to recreate it.
+            </p>
+            <Button
+              className="w-full"
+              onClick={() => { window.location.href = "/"; }}
+            >
+              Create Free Account
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => setLimitReason(null)}
             >
               Back
             </Button>
@@ -149,7 +182,7 @@ export function CreateHabitDialog() {
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    {field.value === "avoidance" 
+                    {field.value === "avoidance"
                       ? "Tracks bad habits. Missed days accumulate debt."
                       : "Tracks good habits. Missing a day increases the requirement."}
                   </FormDescription>

@@ -22,6 +22,18 @@ import type {
 const STORAGE_KEY = "protocol:guestHabitData";
 const GUEST_USER_ID = "guest-demo-user";
 
+// Guest sessions are intentionally capped tighter than the free plan (1
+// vs 3) — the point is to let people try the app, not to be a
+// fully-featured free tier with no account required.
+export const GUEST_HABIT_LIMIT = 1;
+
+export class GuestLimitError extends Error {
+  constructor() {
+    super(`Guest sessions are limited to ${GUEST_HABIT_LIMIT} protocol. Create a free account for more.`);
+    this.name = "GuestLimitError";
+  }
+}
+
 interface GuestDailyStatus {
   date: string;
   completed: boolean;
@@ -187,6 +199,9 @@ export const guestStorage = {
 
   createHabit(input: InsertHabit): HabitWithStatus {
     const habits = load();
+    if (habits.length >= GUEST_HABIT_LIMIT) {
+      throw new GuestLimitError();
+    }
     const now = new Date().toISOString();
     const habit: GuestHabit = {
       id: nextId(habits),

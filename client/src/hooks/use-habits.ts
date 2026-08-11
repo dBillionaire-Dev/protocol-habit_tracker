@@ -31,6 +31,16 @@ export function useHabits() {
 }
 
 // POST /api/habits
+export class ApiError extends Error {
+  code?: string;
+  status: number;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export function useCreateHabit() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -44,7 +54,10 @@ export function useCreateHabit() {
         body: JSON.stringify(habit),
       });
 
-      if (!res.ok) throw new Error("Failed to create habit");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message || "Failed to create habit", res.status, body.code);
+      }
       return res.json();
     },
     onSuccess: () => {

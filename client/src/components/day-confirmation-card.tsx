@@ -26,16 +26,14 @@ function calculateWindowState(): WindowState {
   const hours = now.getHours();
 
   // Window is 9:00 PM (21:00) through 12:00 AM (00:00) — a 3-hour span
-  // covering hours 21, 22, and 23. (hours === 21) only matched the first
-  // of those three hours, which is why the countdown used to stop working
-  // correctly after 10 PM.
+  // covering hours 21, 22, and 23.
   const isWindowOpen = hours >= 21 && hours <= 23;
 
   let timeUntilWindow: WindowState["timeUntilWindow"] = null;
   let timeRemaining: WindowState["timeRemaining"] = null;
 
   if (isWindowOpen) {
-    // Count down to the next midnight, not the next top-of-hour.
+    // Count down to the next midnight.
     const midnight = new Date(now);
     midnight.setHours(24, 0, 0, 0);
     timeRemaining = msToHMS(midnight.getTime() - now.getTime());

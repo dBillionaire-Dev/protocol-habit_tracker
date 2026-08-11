@@ -75,11 +75,33 @@ async function loginWithGoogle(): Promise<void> {
   });
 }
 
+async function checkExistingProvider(
+  email: string,
+): Promise<{ exists: boolean; provider: string | null }> {
+  const res = await apiFetch(`/api/auth/check-provider?email=${encodeURIComponent(email)}`);
+  if (!res.ok) return { exists: false, provider: null };
+  return res.json();
+}
+
+function providerLabel(provider: string): string {
+  return provider === "google" ? "Google Sign-In" : provider === "email" ? "email and password" : provider;
+}
+
 async function loginWithEmail(email: string, password: string): Promise<void> {
   setGuestMode(false);
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw new Error(error.message);
+  if (!error) return;
+
+  // Give a clearer message than "invalid credentials" if this email is
+  // actually registered via Google rather than a wrong password.
+  const check = await checkExistingProvider(email);
+  if (check.exists && check.provider === "google") {
+    throw new Error(
+      `This email is registered via ${providerLabel(check.provider)}. Use "Authenticate with Google" instead.`,
+    );
+  }
+  throw new Error(error.message);
 }
 
 async function signupWithEmail(
@@ -89,6 +111,17 @@ async function signupWithEmail(
   lastName?: string,
 ): Promise<void> {
   setGuestMode(false);
+
+  // Block signup up front if this email is already registered via a
+  // different method — otherwise Supabase would create a second, separate
+  // account for the same person.
+  const check = await checkExistingProvider(email);
+  if (check.exists && check.provider && check.provider !== "email") {
+    throw new Error(
+      `This email is already registered via ${providerLabel(check.provider)}. Sign in that way instead.`,
+    );
+  }
+
   const supabase = createClient();
   const { error } = await supabase.auth.signUp({
     email,

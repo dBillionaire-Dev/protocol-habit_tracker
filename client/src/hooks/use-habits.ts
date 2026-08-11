@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type InsertHabit, type HabitWithStatus } from "shared/schema";
 import { apiFetch, isGuestMode } from "@/lib/api";
-import { guestStorage } from "@/lib/guest-storage";
+import { guestStorage, GuestLimitError } from "@/lib/guest-storage";
 
 function getDeleteUrl(id: number): string { return `/api/habits/${id}`; }
 function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`; }
@@ -46,7 +46,14 @@ export function useCreateHabit() {
   return useMutation({
     mutationFn: async (habit: InsertHabit) => {
       if (isGuestMode()) {
-        return guestStorage.createHabit(habit);
+        try {
+          return guestStorage.createHabit(habit);
+        } catch (err) {
+          if (err instanceof GuestLimitError) {
+            throw new ApiError(err.message, 402, "GUEST_LIMIT_REACHED");
+          }
+          throw err;
+        }
       }
 
       const res = await apiFetch("/api/habits", {

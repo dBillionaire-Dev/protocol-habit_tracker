@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Shield, Lock, Activity, TrendingUp, User, Mail, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,20 @@ export default function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errParam = params.get("error");
+    if (errParam === "email_used_with_password") {
+      setError("This email is already registered with a password. Please sign in with your email and password instead.");
+      setShowAuthForm(true);
+    } else if (errParam === "auth_callback_failed") {
+      setError("Google sign-in failed. Please try again.");
+    }
+    if (errParam) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -122,6 +136,10 @@ export default function LandingPage() {
             <h2 className="text-2xl font-bold tracking-tight">Access Terminal</h2>
             <p className="text-muted-foreground">Identify yourself to access your protocols.</p>
           </div>
+
+          {error && (
+            <p className="text-sm text-red-500 text-center">{error}</p>
+          )}
 
           {/* OAuth Buttons */}
           <div className="space-y-4">
@@ -236,10 +254,6 @@ export default function LandingPage() {
                     </Button>
                   </div>
                 </div>
-
-                {error && (
-                  <p className="text-sm text-red-500 text-center">{error}</p>
-                )}
 
                 <Button type="submit" className="w-full h-12" disabled={isLoading}>
                   {isLoading ? (

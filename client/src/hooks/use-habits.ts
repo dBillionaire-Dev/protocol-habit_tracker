@@ -3,7 +3,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type InsertHabit, type HabitWithStatus } from "shared/schema";
 import { apiFetch, isGuestMode } from "@/lib/api";
-import { guestStorage, GuestLimitError } from "@/lib/guest-storage";
+import { guestStorage, GuestLimitError, GuestDebtRepaymentError } from "@/lib/guest-storage";
+
+function getRepayDebtUrl(id: number): string { return `/api/habits/${id}/repay-debt`; }
 
 function getDeleteUrl(id: number): string { return `/api/habits/${id}`; }
 function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`; }
@@ -139,16 +141,69 @@ export function useConfirmCleanDay() {
 export function useCompleteDaily() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, date, completed }: { id: number; date: string; completed: boolean }) => {
+    mutationFn: async ({
+      id,
+      date,
+      completed,
+      debtRepayment,
+    }: {
+      id: number;
+      date: string;
+      completed: boolean;
+      debtRepayment?: number;
+    }) => {
       if (isGuestMode()) {
-        return guestStorage.completeDailyTask(id, date, completed);
+        try {
+          return guestStorage.completeDailyTask(id, date, completed, debtRepayment);
+        } catch (err) {
+          if (err instanceof GuestDebtRepaymentError) {
+            throw new ApiError(err.message, 400, "DEBT_REPAYMENT_INVALID");
+          }
+          throw err;
+        }
       }
 
       const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
-        body: JSON.stringify({ date, completed }),
+        body: JSON.stringify({ date, completed, debtRepayment }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message || "Failed to update status", res.status);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+    },
+  });
+}
+
+// POST /api/habits/:id/repay-debt — repay outstanding Build debt
+// independently of completing today's requirement.
+export function useRepayDebt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, amount }: { id: number; amount: number }) => {
+      if (isGuestMode()) {
+        try {
+          return guestStorage.repayDebt(id, amount);
+        } catch (err) {
+          if (err instanceof GuestDebtRepaymentError) {
+            throw new ApiError(err.message, 400, "DEBT_REPAYMENT_INVALID");
+          }
+          throw err;
+        }
+      }
+
+      const res = await apiFetch(getRepayDebtUrl(id), {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message || "Failed to record repayment", res.status);
+      }
       return res.json();
     },
     onSuccess: () => {

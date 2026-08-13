@@ -34,6 +34,8 @@ export class GuestLimitError extends Error {
   }
 }
 
+export class GuestDebtRepaymentError extends Error {}
+
 interface GuestDailyStatus {
   date: string;
   completed: boolean;
@@ -57,8 +59,9 @@ interface GuestHabit {
   // Guest-only history, equivalent to separate tables server-side.
   events: { timestamp: string; notes?: string }[]; // habit_events
   dailyStatuses: GuestDailyStatus[]; // daily_habit_status
-  debtCount: number; // habit_debts.debt_count
-  lastCleanDate: string | null; // habit_debts.last_clean_date
+  debtCount: number; // habit_debts.debt_count (avoidance only)
+  lastCleanDate: string | null; // habit_debts.last_clean_date (avoidance only)
+  debtRepayments: { amount: number; date: string }[]; // build_debt_repayments (build only)
 }
 
 function todayStr(): string {
@@ -159,6 +162,22 @@ function updateStreak(habit: GuestHabit, date: string, isSuccess: boolean) {
   }
 }
 
+// Same rules as DatabaseStorage.getBuildDebtSummary: derived from real
+// history, never a directly-settable number.
+function getBuildDebtSummary(habit: GuestHabit): {
+  totalMissedDays: number;
+  totalRepaidDays: number;
+  remainingDebt: number;
+} {
+  const totalMissedDays = habit.dailyStatuses.filter((s) => !s.completed).length;
+  const totalRepaidDays = habit.debtRepayments.reduce((sum, r) => sum + r.amount, 0);
+  return {
+    totalMissedDays,
+    totalRepaidDays,
+    remainingDebt: Math.max(0, totalMissedDays - totalRepaidDays),
+  };
+}
+
 function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
   const {
     events: _events,
@@ -182,12 +201,16 @@ function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
 
   const penaltyLevel = calculatePenaltyLevel(habit, today);
   const status = getDailyStatus(habit, today);
+  const debtSummary = getBuildDebtSummary(habit);
   return {
     ...withDate,
     penaltyLevel,
     todayTask: (habit.baseTaskValue || 0) + (habit.baseTaskValue || 0) * penaltyLevel,
     todayCompleted: status?.completed ?? false,
     todayMissed: status ? !status.completed : false,
+    totalMissedDays: debtSummary.totalMissedDays,
+    totalRepaidDays: debtSummary.totalRepaidDays,
+    remainingDebt: debtSummary.remainingDebt,
   };
 }
 
@@ -221,6 +244,7 @@ export const guestStorage = {
       dailyStatuses: [],
       debtCount: 0,
       lastCleanDate: null,
+      debtRepayments: [],
     };
     habits.push(habit);
     save(habits);
@@ -272,7 +296,8 @@ export const guestStorage = {
     id: number,
     date: string,
     completed: boolean,
-  ): { completed: boolean; penaltyLevel: number } {
+    debtRepayment?: number,
+  ): { completed: boolean; penaltyLevel: number; debtSummary: ReturnType<typeof getBuildDebtSummary> } {
     const habits = load();
     const habit = habits.find((h) => h.id === id);
     if (!habit) throw new Error("Habit not found");
@@ -287,9 +312,49 @@ export const guestStorage = {
     }
 
     updateStreak(habit, date, completed);
+
+    // Completing today's requirement does NOT implicitly repay debt —
+    // that's a separate, explicit choice.
+    let debtSummary = getBuildDebtSummary(habit);
+    if (debtRepayment && debtRepayment > 0) {
+      if (debtRepayment > debtSummary.remainingDebt) {
+        throw new GuestDebtRepaymentError(
+          debtSummary.remainingDebt === 0
+            ? "You have no outstanding debt to repay."
+            : `Repayment amount cannot exceed your outstanding debt of ${debtSummary.remainingDebt}.`,
+        );
+      }
+      habit.debtRepayments.push({ amount: debtRepayment, date });
+      debtSummary = getBuildDebtSummary(habit);
+    }
+
     save(habits);
 
-    return { completed, penaltyLevel };
+    return { completed, penaltyLevel, debtSummary };
+  },
+
+  repayDebt(id: number, amount: number): ReturnType<typeof getBuildDebtSummary> {
+    const habits = load();
+    const habit = habits.find((h) => h.id === id);
+    if (!habit) throw new Error("Habit not found");
+
+    if (!Number.isInteger(amount) || amount < 1) {
+      throw new GuestDebtRepaymentError("Repayment amount must be a whole number of at least 1.");
+    }
+
+    const summary = getBuildDebtSummary(habit);
+    if (amount > summary.remainingDebt) {
+      throw new GuestDebtRepaymentError(
+        summary.remainingDebt === 0
+          ? "You have no outstanding debt to repay."
+          : `Repayment amount cannot exceed your outstanding debt of ${summary.remainingDebt}.`,
+      );
+    }
+
+    habit.debtRepayments.push({ amount, date: todayStr() });
+    save(habits);
+
+    return getBuildDebtSummary(habit);
   },
 
   clearAll(): void {

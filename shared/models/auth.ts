@@ -34,9 +34,16 @@ export const SUBSCRIPTION_STATUSES = [
 ] as const;
 export type SubscriptionStatus = typeof SUBSCRIPTION_STATUSES[number];
 
+export const PLAN_TIERS = ["free", "pro", "premium_plus"] as const;
+export type PlanTier = typeof PLAN_TIERS[number];
+
+export const BILLING_INTERVALS = ["monthly", "annual"] as const;
+export type BillingInterval = typeof BILLING_INTERVALS[number];
+
 export const subscriptions = pgTable("subscriptions", {
   userId: varchar("user_id").primaryKey().references(() => users.id),
-  plan: varchar("plan", { enum: ["free", "pro"] }).notNull().default("free"),
+  plan: varchar("plan", { enum: PLAN_TIERS }).notNull().default("free"),
+  billingInterval: varchar("billing_interval", { enum: BILLING_INTERVALS }),
   status: varchar("status", { enum: SUBSCRIPTION_STATUSES }),
   paystackCustomerCode: varchar("paystack_customer_code"),
   paystackSubscriptionCode: varchar("paystack_subscription_code"),
@@ -49,5 +56,9 @@ export const subscriptions = pgTable("subscriptions", {
 export type Subscription = typeof subscriptions.$inferSelect;
 export type UpsertSubscription = typeof subscriptions.$inferInsert;
 
+// Free plan is capped at 3 protocols total (Build + Avoidance combined),
+// not 3 of each. Pro and Premium Plus are both unlimited — see
+// client/src/lib/entitlements.ts for the single source of truth on what
+// each tier can do, rather than scattering `plan === "..."` checks.
 export const FREE_PLAN_HABIT_LIMIT = 3;
 

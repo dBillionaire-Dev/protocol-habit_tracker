@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     await storage.upsertSubscription({
       userId: user.id,
       plan: "free",
+      billingInterval: null,
       status: "cancelled",
     });
     return NextResponse.json({ message: "Subscription cancelled" });

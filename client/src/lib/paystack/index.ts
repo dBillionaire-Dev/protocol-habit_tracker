@@ -57,6 +57,7 @@ export async function initializeSubscriptionTransaction(params: {
     body: JSON.stringify({
       email: params.email,
       plan: params.planCode,
+      currency: "NGN",
       callback_url: params.callbackUrl,
       metadata: params.metadata,
     }),

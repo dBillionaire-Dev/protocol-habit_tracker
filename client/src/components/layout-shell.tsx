@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles } from "lucide-react";
+import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -12,6 +12,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -24,8 +26,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { useBillingStatus, useCancelSubscription } from "@/hooks/use-billing";
+import { useBillingStatus, useCancelSubscription, useSetPreviewPlan } from "@/hooks/use-billing";
 import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
+import type { PlanTier } from "shared/schema";
 
 interface LayoutShellProps {
   children: React.ReactNode;
@@ -42,6 +45,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const { user, logout, deleteAccount, isDeletingAccount, deleteAccountError } = useAuth();
   const { data: billing } = useBillingStatus();
   const { mutate: cancelSubscription, isPending: isCancelling } = useCancelSubscription();
+  const { mutate: setPreviewPlan, isPending: isSettingPreview } = useSetPreviewPlan();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -49,6 +53,8 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const isGuest = user?.provider === "guest";
   const plan = billing?.plan ?? "free";
   const isPaid = isPaidPlan(plan);
+  const isSuperUser = billing?.isSuperUser ?? false;
+  const isPreviewing = isSuperUser && !!billing?.previewPlan;
   const displayName =
     user?.firstName || user?.lastName
       ? `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
@@ -95,6 +101,12 @@ export function LayoutShell({ children }: LayoutShellProps) {
                         {planDisplayName(plan)}
                       </span>
                     )}
+                    {isPreviewing && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-purple-400 bg-purple-400/10 px-1.5 py-0.5 rounded">
+                        <FlaskConical className="w-3 h-3" />
+                        Preview
+                      </span>
+                    )}
                   </div>
                   {!isGuest && user?.email && (
                     <p className="text-xs leading-none text-muted-foreground truncate">
@@ -109,6 +121,31 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {isSuperUser && (
+                <>
+                  <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground font-normal pb-0">
+                    Preview as (testing only)
+                  </DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={billing?.previewPlan ?? "live"}
+                    onValueChange={(value) => setPreviewPlan(value === "live" ? null : (value as PlanTier))}
+                  >
+                    <DropdownMenuRadioItem value="live" disabled={isSettingPreview} data-testid="menu-preview-live">
+                      Live (full access)
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="free" disabled={isSettingPreview} data-testid="menu-preview-free">
+                      Free
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="pro" disabled={isSettingPreview} data-testid="menu-preview-pro">
+                      Pro
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="premium_plus" disabled={isSettingPreview} data-testid="menu-preview-premium-plus">
+                      Premium Plus
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               {!isGuest && !isPaid && (
                 <DropdownMenuItem asChild data-testid="menu-item-upgrade">
                   <Link href="/pricing" onClick={() => setMenuOpen(false)}>
@@ -227,6 +264,16 @@ export function LayoutShell({ children }: LayoutShellProps) {
           </AlertDialog>
         </div>
       </header>
+
+      {/* Preview mode banner — impossible to miss while testing as a
+          different tier, so a super user never mistakes it for their
+          real account state. */}
+      {isPreviewing && (
+        <div className="bg-purple-500/10 border-b border-purple-500/20 text-purple-400 text-sm py-2 text-center font-medium">
+          <FlaskConical className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+          Previewing as {planDisplayName(billing?.previewPlan ?? "free")} — this is not your real plan
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="flex-1 container max-w-5xl mx-auto px-4 py-8">

@@ -10,6 +10,7 @@ export interface ResolvedUser {
   lastName: string | null;
   profileImageUrl: string | null;
   provider: string;
+  isSuperUser: boolean;
 }
 
 const GUEST_PROFILE: ResolvedUser = {
@@ -19,7 +20,21 @@ const GUEST_PROFILE: ResolvedUser = {
   lastName: "User",
   profileImageUrl: null,
   provider: "guest",
+  isSuperUser: false,
 };
+
+// Comma-separated allow-list, e.g. "you@gmail.com,other@gmail.com".
+// Recomputed on every login (not hand-edited in the DB), so removing an
+// email from this env var revokes super-user access on that person's
+// next login too — no manual DB cleanup needed either direction.
+function isSuperUserEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const allowList = (process.env.SUPER_USER_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return allowList.includes(email.toLowerCase());
+}
 
 /**
  * Resolves the current user for a Route Handler / Server Action.
@@ -59,6 +74,7 @@ export async function resolveUser(
     firstName: meta.given_name ?? meta.first_name ?? null,
     lastName: meta.family_name ?? meta.last_name ?? null,
     profileImageUrl: meta.avatar_url ?? meta.picture ?? null,
+    isSuperUser: isSuperUserEmail(supaUser.email),
   });
 
   return {
@@ -68,5 +84,6 @@ export async function resolveUser(
     lastName: profile.lastName,
     profileImageUrl: profile.profileImageUrl,
     provider: profile.provider ?? provider,
+    isSuperUser: profile.isSuperUser,
   };
 }

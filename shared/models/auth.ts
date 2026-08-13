@@ -1,4 +1,4 @@
-import { pgTable, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, boolean } from "drizzle-orm/pg-core";
 
 // Profile table. Rows here are keyed 1:1 with Supabase's `auth.users.id`
 // (a uuid). Supabase Auth owns credentials/identities; this table only
@@ -17,6 +17,12 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   showOnboarding: varchar("show_onboarding").default("true"),
+  // Full access to every feature/tier regardless of billing status, for
+  // internal testing. Set automatically on login based on the
+  // SUPER_USER_EMAILS env var allow-list (see require-user.ts) — not
+  // hand-edited in the DB, so removing an email from that list revokes
+  // access on the person's next login too.
+  isSuperUser: boolean("is_super_user").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -49,6 +55,12 @@ export const subscriptions = pgTable("subscriptions", {
   paystackSubscriptionCode: varchar("paystack_subscription_code"),
   paystackEmailToken: varchar("paystack_email_token"), // needed to call the "disable subscription" endpoint
   currentPeriodEnd: timestamp("current_period_end"),
+  // Super-user only: lets an internal tester view/experience the app as
+  // if they were on a specific tier, without touching their real
+  // subscription. Ignored entirely for non-super-users (enforced
+  // server-side in the preview-plan route, not just by convention). Null
+  // means "not previewing" — super users default to full access.
+  previewPlan: varchar("preview_plan", { enum: PLAN_TIERS }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

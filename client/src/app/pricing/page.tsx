@@ -69,7 +69,7 @@ export default function PricingPage() {
               )}
               onClick={() => setInterval("annual")}
             >
-              Annual <span className="text-emerald-500">save ~17%</span>
+              Annual <span className="text-emerald-500 font-semibold">BEST VALUE</span>
             </button>
           </div>
         </div>

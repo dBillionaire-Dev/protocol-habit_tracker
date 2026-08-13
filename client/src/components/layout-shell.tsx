@@ -72,6 +72,23 @@ export function LayoutShell({ children }: LayoutShellProps) {
             <span>PROTOCOL</span>
           </Link>
 
+          {!isGuest && user && (
+            <nav className="hidden sm:flex items-center gap-1 text-sm">
+              <Link
+                href="/dashboard"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Dashboard
+              </Link>
+              <Link
+                href="/analytics"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Analytics
+              </Link>
+            </nav>
+          )}
+
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
               <Button

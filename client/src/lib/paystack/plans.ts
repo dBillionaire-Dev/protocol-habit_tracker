@@ -28,22 +28,21 @@ export function resolvePlanCode(tier: Exclude<PlanTier, "free">, interval: Billi
   return code;
 }
 
-// Display-only NGN amounts for the pricing page. These are starting
-// suggestions (~$2-4/mo equivalent) — update to match whatever you
-// actually configure in Paystack. Annual pricing here gives ~2 months
-// free relative to paying monthly, a common SaaS convention; adjust as
-// you like.
+// Display-only NGN amounts for the pricing page, matching the product
+// spec exactly. These are display strings only — Paystack's Plan
+// configuration (see resolvePlanCode above) is the actual source of
+// truth for what gets charged; keep the two in sync manually.
 export const DISPLAY_PRICING: Record<
   Exclude<PlanTier, "free">,
   Record<BillingInterval, number>
 > = {
   pro: {
-    monthly: 2500,
-    annual: 25000,
+    monthly: 2999,
+    annual: 29999,
   },
   premium_plus: {
-    monthly: 6000,
-    annual: 60000,
+    monthly: 5999,
+    annual: 59999,
   },
 };
 

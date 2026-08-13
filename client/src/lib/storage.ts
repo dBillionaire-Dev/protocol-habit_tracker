@@ -7,6 +7,8 @@ import {
   subscriptions, type Subscription, type UpsertSubscription,
 } from "shared/schema";
 import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
+import { effectivePlan } from "./entitlements";
+import type { PlanTier } from "shared/schema";
 
 export class DebtRepaymentError extends Error {}
 
@@ -29,6 +31,7 @@ export interface IStorage {
   getSubscription(userId: string): Promise<Subscription | undefined>;
   upsertSubscription(sub: UpsertSubscription): Promise<Subscription>;
   countActiveHabits(userId: string): Promise<number>;
+  getEffectivePlan(userId: string, isSuperUser: boolean): Promise<PlanTier>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -139,6 +142,16 @@ export class DatabaseStorage implements IStorage {
       .from(habits)
       .where(eq(habits.userId, userId));
     return result?.count ?? 0;
+  }
+
+  // Resolves the plan actually used for feature gating — the real
+  // billing plan, or a super user's full-access/preview override. See
+  // entitlements.effectivePlan for the exact rules.
+  async getEffectivePlan(userId: string, isSuperUser: boolean): Promise<PlanTier> {
+    const sub = await this.getSubscription(userId);
+    const isActive = sub?.status === "active" && sub.plan !== "free";
+    const realPlan: PlanTier = isActive ? sub!.plan : "free";
+    return effectivePlan({ realPlan, isSuperUser, previewPlan: sub?.previewPlan ?? null });
   }
 
   // Habit Implementation

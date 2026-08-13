@@ -64,3 +64,37 @@ export function planDisplayName(plan: PlanTier): string {
       return "Premium Plus";
   }
 }
+
+/**
+ * Feature-level entitlements, per the product spec's suggested API:
+ *   hasFeature(plan, "advanced_analytics")
+ * This is the single place that changes when a feature moves between
+ * tiers — routes and UI should call this rather than comparing plan
+ * strings directly. habitLimitFor/hasUnlimitedHabits above predate this
+ * and stay as-is (habit limits work differently: a number, not a
+ * boolean), but every new gated feature should go through here.
+ */
+export type FeatureKey =
+  | "advanced_analytics"
+  | "full_history"
+  | "custom_rules"
+  | "data_export"
+  | "advanced_insights"
+  | "ai_insights"
+  | "ai_planning"
+  | "accountability";
+
+const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
+  advanced_analytics: ["pro", "premium_plus"],
+  full_history: ["pro", "premium_plus"],
+  custom_rules: ["pro", "premium_plus"],
+  data_export: ["pro", "premium_plus"],
+  advanced_insights: ["pro", "premium_plus"],
+  ai_insights: ["premium_plus"],
+  ai_planning: ["premium_plus"],
+  accountability: ["premium_plus"],
+};
+
+export function hasFeature(plan: PlanTier, feature: FeatureKey): boolean {
+  return FEATURE_MATRIX[feature].includes(plan);
+}

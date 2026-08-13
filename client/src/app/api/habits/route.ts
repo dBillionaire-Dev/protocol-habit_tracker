@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { storage } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/require-user";
 import { insertHabitSchema } from "shared/schema";
-import { habitLimitFor, hasUnlimitedHabits } from "@/lib/entitlements";
+import { habitLimitFor, hasUnlimitedHabits, effectivePlan } from "@/lib/entitlements";
 import { z } from "zod";
 
 export async function GET(request: NextRequest) {
@@ -32,7 +32,12 @@ export async function POST(request: NextRequest) {
   try {
     const sub = await storage.getSubscription(user.id);
     const isActive = sub?.status === "active" && sub.plan !== "free";
-    const plan = isActive ? sub.plan : "free";
+    const realPlan = isActive ? sub.plan : "free";
+    const plan = effectivePlan({
+      realPlan,
+      isSuperUser: user.isSuperUser,
+      previewPlan: sub?.previewPlan ?? null,
+    });
 
     if (!hasUnlimitedHabits(plan)) {
       const habitCount = await storage.countActiveHabits(user.id);

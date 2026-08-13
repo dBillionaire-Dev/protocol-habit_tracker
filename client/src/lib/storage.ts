@@ -1,12 +1,21 @@
 import { db } from "./db";
 import {
-  habits, habitEvents, dailyHabitStatus, habitDebts,
+  habits, habitEvents, dailyHabitStatus, habitDebts, buildDebtRepayments,
   type InsertHabit, type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,
-  type CreateHabitRequest, type HabitWithStatus,
+  type CreateHabitRequest, type HabitWithStatus, type BuildDebtSummary,
   users, type User, type UpsertUser,
   subscriptions, type Subscription, type UpsertSubscription,
 } from "shared/schema";
 import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
+
+export class DebtRepaymentError extends Error {}
+
+// The type of the `tx` param inside a db.transaction(async (tx) => ...)
+// callback — distinct from `typeof db` (a PgTransaction isn't assignable
+// to NodePgDatabase). Functions that need to run either standalone or
+// inside an existing transaction take this type so callers can pass
+// either `db` or a `tx`.
+type DbOrTx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
 export interface IStorage {
   // Auth
@@ -34,8 +43,10 @@ export interface IStorage {
   
   // Build
   getDailyStatus(habitId: number, date: string): Promise<DailyHabitStatus | undefined>;
-  completeDailyTask(habitId: number, date: string, completed: boolean): Promise<DailyHabitStatus>;
+  completeDailyTask(habitId: number, date: string, completed: boolean, debtRepayment?: number): Promise<DailyHabitStatus & { debtSummary: BuildDebtSummary }>;
   calculatePenaltyLevel(habitId: number, date: string): Promise<number>;
+  getBuildDebtSummary(habitId: number): Promise<BuildDebtSummary>;
+  repayBuildDebt(habitId: number, userId: string, amount: number, date: string): Promise<BuildDebtSummary>;
   
   // Streaks
   updateStreak(habitId: number, date: string, isSuccess: boolean): Promise<void>;
@@ -94,6 +105,7 @@ export class DatabaseStorage implements IStorage {
           await tx.delete(habitEvents).where(eq(habitEvents.habitId, habitId));
           await tx.delete(dailyHabitStatus).where(eq(dailyHabitStatus.habitId, habitId));
           await tx.delete(habitDebts).where(eq(habitDebts.habitId, habitId));
+          await tx.delete(buildDebtRepayments).where(eq(buildDebtRepayments.habitId, habitId));
         }
         await tx.delete(habits).where(eq(habits.userId, userId));
       }
@@ -154,6 +166,11 @@ export class DatabaseStorage implements IStorage {
         h.todayCompleted = status?.completed ?? false;
         // Check if marked as missed (has status record but not completed)
         h.todayMissed = status ? !status.completed : false;
+
+        const debtSummary = await this.getBuildDebtSummary(habit.id);
+        h.totalMissedDays = debtSummary.totalMissedDays;
+        h.totalRepaidDays = debtSummary.totalRepaidDays;
+        h.remainingDebt = debtSummary.remainingDebt;
       }
       results.push(h);
     }
@@ -188,6 +205,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(habitEvents).where(eq(habitEvents.habitId, id));
     await db.delete(dailyHabitStatus).where(eq(dailyHabitStatus.habitId, id));
     await db.delete(habitDebts).where(eq(habitDebts.habitId, id));
+    await db.delete(buildDebtRepayments).where(eq(buildDebtRepayments.habitId, id));
     await db.delete(habits).where(eq(habits.id, id));
   }
 
@@ -258,30 +276,51 @@ export class DatabaseStorage implements IStorage {
     return status;
   }
 
-  async completeDailyTask(habitId: number, date: string, completed: boolean): Promise<DailyHabitStatus> {
+  async completeDailyTask(
+    habitId: number,
+    date: string,
+    completed: boolean,
+    debtRepayment?: number,
+  ): Promise<DailyHabitStatus & { debtSummary: BuildDebtSummary }> {
     const penaltyLevel = await this.calculatePenaltyLevel(habitId, date);
-    
-    // Check if status exists
-    const existing = await this.getDailyStatus(habitId, date);
-    
-    let status: DailyHabitStatus;
-    if (existing) {
-      const [updated] = await db.update(dailyHabitStatus)
-        .set({ completed, penaltyLevel })
-        .where(and(eq(dailyHabitStatus.habitId, habitId), eq(dailyHabitStatus.date, date)))
-        .returning();
-      status = updated;
-    } else {
-      const [inserted] = await db.insert(dailyHabitStatus)
-        .values({ habitId, date, completed, penaltyLevel })
-        .returning();
-      status = inserted;
-    }
-    
-    // Update streak
-    await this.updateStreak(habitId, date, completed);
-      
-    return status;
+
+    return db.transaction(async (tx) => {
+      // Lock the habit row so a concurrent repayment (standalone or via
+      // another completion call) can't race this one — see
+      // repayBuildDebtInTx for why this matters.
+      await tx.execute(sql`SELECT id FROM habits WHERE id = ${habitId} FOR UPDATE`);
+
+      const existing = await this.getDailyStatus(habitId, date);
+
+      let status: DailyHabitStatus;
+      if (existing) {
+        const [updated] = await tx.update(dailyHabitStatus)
+          .set({ completed, penaltyLevel })
+          .where(and(eq(dailyHabitStatus.habitId, habitId), eq(dailyHabitStatus.date, date)))
+          .returning();
+        status = updated;
+      } else {
+        const [inserted] = await tx.insert(dailyHabitStatus)
+          .values({ habitId, date, completed, penaltyLevel })
+          .returning();
+        status = inserted;
+      }
+
+      await this.updateStreakInTx(tx, habitId, date, completed);
+
+      // Completing today's requirement does NOT implicitly repay debt —
+      // that's a separate, explicit choice (see repayBuildDebtInTx).
+      // Only record a repayment here if the caller actually asked for one.
+      const habit = await this.getHabit(habitId);
+      let debtSummary: BuildDebtSummary;
+      if (debtRepayment && debtRepayment > 0 && habit) {
+        debtSummary = await this.repayBuildDebtInTx(tx, habitId, habit.userId, debtRepayment, date);
+      } else {
+        debtSummary = await this.getBuildDebtSummaryInTx(tx, habitId);
+      }
+
+      return { ...status, debtSummary };
+    });
   }
 
   async calculatePenaltyLevel(habitId: number, today: string): Promise<number> {
@@ -327,6 +366,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateStreak(habitId: number, date: string, isSuccess: boolean): Promise<void> {
+    await this.updateStreakInTx(db, habitId, date, isSuccess);
+  }
+
+  private async updateStreakInTx(tx: DbOrTx, habitId: number, date: string, isSuccess: boolean): Promise<void> {
     const habit = await this.getHabit(habitId);
     if (!habit) return;
     
@@ -361,14 +404,13 @@ export class DatabaseStorage implements IStorage {
         updateData.longestStreakEnd = null; // Still active
       }
       
-      await db.update(habits)
+      await tx.update(habits)
         .set(updateData)
         .where(eq(habits.id, habitId));
     } else {
       // Streak broken - record the end date of longest if it was the current streak
-      const habit = await this.getHabit(habitId);
-      if (habit && habit.currentStreak === habit.longestStreak && habit.currentStreak > 0) {
-        await db.update(habits)
+      if (habit.currentStreak === habit.longestStreak && habit.currentStreak > 0) {
+        await tx.update(habits)
           .set({ 
             currentStreak: 0,
             currentStreakStart: null,
@@ -376,11 +418,87 @@ export class DatabaseStorage implements IStorage {
           })
           .where(eq(habits.id, habitId));
       } else {
-        await db.update(habits)
+        await tx.update(habits)
           .set({ currentStreak: 0, currentStreakStart: null })
           .where(eq(habits.id, habitId));
       }
     }
+  }
+
+  // Build debt: derived from real history (dailyHabitStatus + repayments),
+  // never a directly-settable number. See buildDebtRepayments in
+  // shared/schema.ts for why.
+  async getBuildDebtSummary(habitId: number): Promise<BuildDebtSummary> {
+    return this.getBuildDebtSummaryInTx(db, habitId);
+  }
+
+  private async getBuildDebtSummaryInTx(tx: DbOrTx, habitId: number): Promise<BuildDebtSummary> {
+    const [missedResult] = await tx
+      .select({ count: count() })
+      .from(dailyHabitStatus)
+      .where(and(eq(dailyHabitStatus.habitId, habitId), eq(dailyHabitStatus.completed, false)));
+    const totalMissedDays = missedResult?.count ?? 0;
+
+    const [repaidResult] = await tx
+      .select({ total: sql<number>`COALESCE(SUM(${buildDebtRepayments.amount}), 0)` })
+      .from(buildDebtRepayments)
+      .where(eq(buildDebtRepayments.habitId, habitId));
+    const totalRepaidDays = Number(repaidResult?.total ?? 0);
+
+    return {
+      totalMissedDays,
+      totalRepaidDays,
+      remainingDebt: Math.max(0, totalMissedDays - totalRepaidDays),
+    };
+  }
+
+  async repayBuildDebt(
+    habitId: number,
+    userId: string,
+    amount: number,
+    date: string,
+  ): Promise<BuildDebtSummary> {
+    return db.transaction(async (tx) => {
+      // Row-locks the habit for the duration of this transaction, so a
+      // second concurrent repayment (standalone, or via completeDailyTask)
+      // for the SAME habit has to wait for this one to commit before it
+      // reads outstanding debt — otherwise two simultaneous requests could
+      // both read "1 remaining" and both successfully repay 1, silently
+      // over-repaying. Postgres blocks the second FOR UPDATE until the
+      // first transaction ends, so by the time it proceeds it sees the
+      // up-to-date remaining debt.
+      await tx.execute(sql`SELECT id FROM habits WHERE id = ${habitId} FOR UPDATE`);
+      return this.repayBuildDebtInTx(tx, habitId, userId, amount, date);
+    });
+  }
+
+  private async repayBuildDebtInTx(
+    tx: DbOrTx,
+    habitId: number,
+    userId: string,
+    amount: number,
+    date: string,
+  ): Promise<BuildDebtSummary> {
+    if (!Number.isInteger(amount) || amount < 1) {
+      throw new DebtRepaymentError("Repayment amount must be a whole number of at least 1.");
+    }
+
+    const summary = await this.getBuildDebtSummaryInTx(tx, habitId);
+    if (amount > summary.remainingDebt) {
+      throw new DebtRepaymentError(
+        summary.remainingDebt === 0
+          ? "You have no outstanding debt to repay."
+          : `Repayment amount cannot exceed your outstanding debt of ${summary.remainingDebt}.`,
+      );
+    }
+
+    await tx.insert(buildDebtRepayments).values({ habitId, userId, amount, date });
+
+    return {
+      totalMissedDays: summary.totalMissedDays,
+      totalRepaidDays: summary.totalRepaidDays + amount,
+      remainingDebt: summary.remainingDebt - amount,
+    };
   }
 }
 

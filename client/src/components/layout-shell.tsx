@@ -24,7 +24,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { useBillingStatus, useStartCheckout, useCancelSubscription } from "@/hooks/use-billing";
+import { useBillingStatus, useCancelSubscription } from "@/hooks/use-billing";
+import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
 
 interface LayoutShellProps {
   children: React.ReactNode;
@@ -40,14 +41,14 @@ function initials(firstName?: string | null, lastName?: string | null, email?: s
 export function LayoutShell({ children }: LayoutShellProps) {
   const { user, logout, deleteAccount, isDeletingAccount, deleteAccountError } = useAuth();
   const { data: billing } = useBillingStatus();
-  const { mutate: startCheckout, isPending: isCheckingOut } = useStartCheckout();
   const { mutate: cancelSubscription, isPending: isCancelling } = useCancelSubscription();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const isGuest = user?.provider === "guest";
-  const isPro = billing?.plan === "pro";
+  const plan = billing?.plan ?? "free";
+  const isPaid = isPaidPlan(plan);
   const displayName =
     user?.firstName || user?.lastName
       ? `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
@@ -88,10 +89,10 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 <div className="flex flex-col space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium leading-none truncate">{displayName}</p>
-                    {isPro && (
+                    {isPaid && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
                         <Crown className="w-3 h-3" />
-                        Pro
+                        {planDisplayName(plan)}
                       </span>
                     )}
                   </div>
@@ -108,20 +109,15 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {!isGuest && !isPro && (
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    startCheckout();
-                  }}
-                  disabled={isCheckingOut}
-                  data-testid="menu-item-upgrade"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  {isCheckingOut ? "Redirecting..." : "Upgrade to Pro"}
+              {!isGuest && !isPaid && (
+                <DropdownMenuItem asChild data-testid="menu-item-upgrade">
+                  <Link href="/pricing" onClick={() => setMenuOpen(false)}>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Upgrade Plan
+                  </Link>
                 </DropdownMenuItem>
               )}
-              {!isGuest && isPro && (
+              {!isGuest && isPaid && (
                 <DropdownMenuItem
                   onSelect={(e) => {
                     e.preventDefault();
@@ -168,7 +164,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={isCancelling}>Keep Pro</AlertDialogCancel>
+                <AlertDialogCancel disabled={isCancelling}>Keep {planDisplayName(plan)}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={(e) => {
                     e.preventDefault();

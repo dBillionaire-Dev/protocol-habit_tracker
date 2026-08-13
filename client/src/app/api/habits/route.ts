@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { storage } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/require-user";
-import { insertHabitSchema, FREE_PLAN_HABIT_LIMIT } from "shared/schema";
+import { insertHabitSchema } from "shared/schema";
+import { habitLimitFor, hasUnlimitedHabits } from "@/lib/entitlements";
 import { z } from "zod";
 
 export async function GET(request: NextRequest) {
@@ -30,14 +31,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const sub = await storage.getSubscription(user.id);
-    const isPro = sub?.plan === "pro" && sub.status === "active";
+    const isActive = sub?.status === "active" && sub.plan !== "free";
+    const plan = isActive ? sub.plan : "free";
 
-    if (!isPro) {
+    if (!hasUnlimitedHabits(plan)) {
       const habitCount = await storage.countActiveHabits(user.id);
-      if (habitCount >= FREE_PLAN_HABIT_LIMIT) {
+      const limit = habitLimitFor(plan)!;
+      if (habitCount >= limit) {
         return NextResponse.json(
           {
-            message: `Free plan is limited to ${FREE_PLAN_HABIT_LIMIT} protocols. Upgrade to Pro for unlimited.`,
+            message: `Free plan is limited to ${limit} protocols. Upgrade for unlimited.`,
             code: "PLAN_LIMIT_REACHED",
           },
           { status: 402 },

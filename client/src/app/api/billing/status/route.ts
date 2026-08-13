@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser, GUEST_USER_ID } from "@/lib/auth/require-user";
 import { storage } from "@/lib/storage";
-import { FREE_PLAN_HABIT_LIMIT } from "shared/schema";
+import { habitLimitFor } from "@/lib/entitlements";
 
 export async function GET(request: NextRequest) {
   const user = await resolveUser(request);
@@ -11,10 +11,11 @@ export async function GET(request: NextRequest) {
 
   if (user.id === GUEST_USER_ID) {
     return NextResponse.json({
-      plan: "free",
+      plan: "free" as const,
+      billingInterval: null,
       status: null,
       habitCount: 0,
-      habitLimit: FREE_PLAN_HABIT_LIMIT,
+      habitLimit: habitLimitFor("free"),
     });
   }
 
@@ -23,12 +24,14 @@ export async function GET(request: NextRequest) {
     storage.countActiveHabits(user.id),
   ]);
 
-  const isPro = sub?.plan === "pro" && sub.status === "active";
+  const isActive = sub?.status === "active" && sub.plan !== "free";
+  const plan = isActive ? sub.plan : "free";
 
   return NextResponse.json({
-    plan: isPro ? "pro" : "free",
+    plan,
+    billingInterval: isActive ? sub.billingInterval : null,
     status: sub?.status ?? null,
     habitCount,
-    habitLimit: isPro ? null : FREE_PLAN_HABIT_LIMIT,
+    habitLimit: habitLimitFor(plan),
   });
 }

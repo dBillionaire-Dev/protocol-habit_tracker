@@ -53,6 +53,25 @@ export const habitDebts = pgTable("habit_debts", {
   lastCleanDate: date("last_clean_date"),
 });
 
+// Build-habit debt repayment history. Unlike avoidance's habitDebts (a
+// single mutable counter), Build debt is DERIVED, not stored directly:
+//   totalMissedDays = count of dailyHabitStatus rows where completed = false
+//   totalRepaidDays = sum of this table's `amount` for the habit
+//   remainingDebt   = max(0, totalMissedDays - totalRepaidDays)
+// This keeps the missed-day history (already recorded in dailyHabitStatus)
+// as the single source of truth, and makes repayment an auditable event
+// log rather than a number the frontend could ever set directly.
+export const buildDebtRepayments = pgTable("build_debt_repayments", {
+  id: serial("id").primaryKey(),
+  habitId: integer("habit_id").notNull().references(() => habits.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  amount: integer("amount").notNull(),
+  date: date("date").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type BuildDebtRepayment = typeof buildDebtRepayments.$inferSelect;
+
 // Schemas
 export const insertHabitSchema = createInsertSchema(habits).omit({ 
   id: true, 
@@ -98,5 +117,16 @@ export type HabitWithStatus = Habit & {
   todayTask?: number; // For build - required task amount
   todayCompleted?: boolean; // For build
   todayMissed?: boolean; // For build - marked as missed
-  penaltyLevel?: number; // For build
+  penaltyLevel?: number; // For build - stacking requirement multiplier, NOT debt
+  // For build - missed-day debt, independent of penaltyLevel. See
+  // buildDebtRepayments above for how these are derived.
+  totalMissedDays?: number;
+  totalRepaidDays?: number;
+  remainingDebt?: number;
+};
+
+export type BuildDebtSummary = {
+  totalMissedDays: number;
+  totalRepaidDays: number;
+  remainingDebt: number;
 };

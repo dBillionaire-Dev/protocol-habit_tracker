@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/paystack";
 import {
-  activateProSubscription,
+  activateSubscription,
   markSubscriptionPastDue,
   cancelSubscriptionRecord,
 } from "@/lib/billing";
+import type { PlanTier, BillingInterval } from "shared/schema";
 
 // Paystack webhook. This endpoint is publicly reachable by design (Paystack
 // calls it from their servers), so EVERY request must have its signature
@@ -21,20 +22,25 @@ export async function POST(request: NextRequest) {
   }
 
   const event = JSON.parse(rawBody);
-  const userId = event.data?.metadata?.userId as string | undefined;
+  const metadata = event.data?.metadata as
+    | { userId?: string; tier?: PlanTier; interval?: BillingInterval }
+    | undefined;
+  const userId = metadata?.userId;
 
   try {
     switch (event.event) {
       case "charge.success":
       case "subscription.create": {
         const data = event.data;
-        const resolvedUserId = userId ?? data.metadata?.userId;
-        if (!resolvedUserId) {
-          console.warn(`Paystack ${event.event} event with no userId in metadata`, data.reference);
+        if (!userId || !metadata?.tier || !metadata?.interval) {
+          console.warn(`Paystack ${event.event} event missing tier/interval/userId in metadata`, data.reference);
           break;
         }
-        await activateProSubscription({
-          userId: resolvedUserId,
+        if (metadata.tier === "free") break; // shouldn't happen, but guard anyway
+        await activateSubscription({
+          userId,
+          tier: metadata.tier,
+          interval: metadata.interval,
           customerCode: data.customer?.customer_code,
           subscriptionCode: data.subscription_code,
           emailToken: data.email_token,

@@ -31,7 +31,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { insertHabitSchema } from "shared/schema";
 import { useCreateHabit, ApiError } from "@/hooks/use-habits";
-import { useStartCheckout } from "@/hooks/use-billing";
 import { z } from "zod";
 
 const formSchema = z.object({
@@ -49,7 +48,6 @@ export function CreateHabitDialog() {
   const [open, setOpen] = useState(false);
   const [limitReason, setLimitReason] = useState<LimitReason>(null);
   const { mutateAsync: createHabit, isPending } = useCreateHabit();
-  const { mutate: startCheckout, isPending: isCheckingOut } = useStartCheckout();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -106,15 +104,13 @@ export function CreateHabitDialog() {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               The free plan supports up to 3 active protocols. Upgrade to
-              Pro for unlimited protocols, streak analytics, and data
-              export.
+              Pro or Premium Plus for unlimited protocols.
             </p>
             <Button
               className="w-full"
-              onClick={() => startCheckout()}
-              disabled={isCheckingOut}
+              onClick={() => { window.location.href = "/pricing"; }}
             >
-              {isCheckingOut ? "Redirecting..." : "Upgrade to Pro"}
+              View Plans
             </Button>
             <Button
               variant="ghost"

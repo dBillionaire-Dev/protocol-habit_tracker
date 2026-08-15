@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles, FlaskConical } from "lucide-react";
+import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles, FlaskConical, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -97,6 +97,12 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 AI
+              </Link>
+              <Link
+                href="/support"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Support
               </Link>
             </nav>
           )}
@@ -196,6 +202,12 @@ export function LayoutShell({ children }: LayoutShellProps) {
                   Manage Subscription
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem asChild data-testid="menu-item-support">
+                <Link href="/support" onClick={() => setMenuOpen(false)}>
+                  <HelpCircle className="w-4 h-4 mr-2" />
+                  Support
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => logout()} data-testid="menu-item-sign-out">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out

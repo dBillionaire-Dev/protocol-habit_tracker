@@ -82,3 +82,63 @@ export async function generateStructured<T>(prompt: string): Promise<T> {
     throw new Error("Gemini returned invalid JSON");
   }
 }
+
+export type { ChatMessage } from "./gemini-types";
+import type { ChatMessage } from "./gemini-types";
+
+/**
+ * Multi-turn plain-text chat, for the AI live chat support widget.
+ * Unlike generateStructured, this doesn't force JSON output — it's a
+ * normal conversational reply. Uses Gemini's systemInstruction field to
+ * keep the persistent context (what PROTOCOL is, FAQ knowledge,
+ * boundaries) separate from the actual back-and-forth turns.
+ */
+export async function generateChatReply(params: {
+  systemInstruction: string;
+  messages: ChatMessage[];
+}): Promise<string> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new AiNotConfiguredError();
+  }
+
+  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+
+  const contents = params.messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  let res: Response;
+  try {
+    res = await fetch(`${GEMINI_API_BASE}/${model}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: params.systemInstruction }] },
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 500,
+        },
+      }),
+    });
+  } catch (err) {
+    throw new Error(`Failed to reach Gemini: ${err instanceof Error ? err.message : "unknown error"}`);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Gemini request failed (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== "string") {
+    throw new Error("Gemini returned an unexpected response shape");
+  }
+  return text;
+}

@@ -32,6 +32,7 @@ export interface IStorage {
   upsertSubscription(sub: UpsertSubscription): Promise<Subscription>;
   countActiveHabits(userId: string): Promise<number>;
   getEffectivePlan(userId: string, isSuperUser: boolean): Promise<PlanTier>;
+  getHabitBriefs(userId: string): Promise<{ name: string; type: "build" | "avoidance"; currentStreak: number; longestStreak: number }[]>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -152,6 +153,24 @@ export class DatabaseStorage implements IStorage {
     const isActive = sub?.status === "active" && sub.plan !== "free";
     const realPlan: PlanTier = isActive ? sub!.plan : "free";
     return effectivePlan({ realPlan, isSuperUser, previewPlan: sub?.previewPlan ?? null });
+  }
+
+  // Lightweight per-habit summary used for AI prompts — deliberately
+  // excludes anything beyond name/type/streaks (no notes, no raw event
+  // history) to keep what's sent to the AI provider minimal.
+  async getHabitBriefs(
+    userId: string,
+  ): Promise<{ name: string; type: "build" | "avoidance"; currentStreak: number; longestStreak: number }[]> {
+    const rows = await db
+      .select({
+        name: habits.name,
+        type: habits.type,
+        currentStreak: habits.currentStreak,
+        longestStreak: habits.longestStreak,
+      })
+      .from(habits)
+      .where(eq(habits.userId, userId));
+    return rows;
   }
 
   // Habit Implementation

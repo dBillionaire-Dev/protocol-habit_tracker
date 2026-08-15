@@ -86,6 +86,18 @@ export function LayoutShell({ children }: LayoutShellProps) {
               >
                 Analytics
               </Link>
+              <Link
+                href="/history"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                History
+              </Link>
+              <Link
+                href="/ai"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                AI
+              </Link>
             </nav>
           )}
 

@@ -22,3 +22,43 @@ export interface AnalyticsSummary {
   longestStreak: number;
   timeSeries: { date: string; completionRate: number | null }[];
 }
+
+// --- History / Export types ---
+// Shared between the server-only history engine (lib/history.ts) and
+// client hooks — kept import-safe (no `db` dependency) for the same
+// reason as the analytics types above.
+
+export type HistoryStatus = "completed" | "missed" | "clean" | "violation";
+
+export interface HistoryEntry {
+  date: string; // YYYY-MM-DD
+  habitId: number;
+  habitName: string;
+  type: "build" | "avoidance";
+  status: HistoryStatus;
+  completed: boolean;
+  missed: boolean;
+  // Build: accurately reconstructed by replaying completed/missed days in
+  // order — this is exact, not estimated, since Build's streak rule is
+  // fully determined by that sequence.
+  // Avoidance: null. Avoid's real streak only advances on an explicit
+  // "Confirm Clean Day" action, and only the single latest confirmation
+  // date is stored (see habitDebts.lastCleanDate) — there's no historical
+  // log of every past confirmation, so a per-day streak can't be
+  // reconstructed honestly. Showing null here beats fabricating a number.
+  streak: number | null;
+  // Build: dailyHabitStatus.penaltyLevel for that day (exact, stored).
+  // Avoidance: count of violation events logged on that specific date
+  // (exact, derived from timestamped events) — not a running debt total,
+  // since avoid's debt decrements aren't individually logged historically
+  // (only the current count persists), so a historical running total
+  // can't be reconstructed honestly either.
+  penaltyInfo: number | null;
+}
+
+export interface HistoryFilters {
+  range: AnalyticsRange;
+  habitId?: number;
+  type?: "build" | "avoidance";
+  status?: HistoryStatus;
+}

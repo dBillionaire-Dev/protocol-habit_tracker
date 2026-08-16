@@ -1,4 +1,5 @@
 import { storage } from "@/lib/storage";
+import { handlePaidReferralIfApplicable } from "@/lib/referrals";
 import type { PlanTier, BillingInterval } from "shared/schema";
 
 interface PaystackSubscriptionData {
@@ -36,6 +37,19 @@ export async function activateSubscription(data: {
     paystackEmailToken: data.emailToken,
     currentPeriodEnd: data.nextPaymentDate ? new Date(data.nextPaymentDate) : null,
   });
+
+  // Paid-referral reward check. Safe to call from both the webhook and
+  // the callback for the same purchase — grantReward's idempotency key
+  // is tied to the referral relationship, not this specific event, so a
+  // duplicate call here is a guaranteed no-op, not a duplicate reward.
+  try {
+    await handlePaidReferralIfApplicable({
+      referredUserId: data.userId,
+      purchasedPlan: data.tier,
+    });
+  } catch (err) {
+    console.error("Paid-referral reward check failed:", err);
+  }
 }
 
 export async function markSubscriptionPastDue(userId: string): Promise<void> {

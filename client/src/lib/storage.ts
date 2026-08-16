@@ -152,7 +152,14 @@ export class DatabaseStorage implements IStorage {
     const sub = await this.getSubscription(userId);
     const isActive = sub?.status === "active" && sub.plan !== "free";
     const realPlan: PlanTier = isActive ? sub!.plan : "free";
-    return effectivePlan({ realPlan, isSuperUser, previewPlan: sub?.previewPlan ?? null });
+    const referralBonusActive = !!(sub?.referralBonusExpiresAt && sub.referralBonusExpiresAt.getTime() > Date.now());
+    return effectivePlan({
+      realPlan,
+      isSuperUser,
+      previewPlan: sub?.previewPlan ?? null,
+      referralBonusPlan: sub?.referralBonusPlan ?? null,
+      referralBonusActive,
+    });
   }
 
   // Lightweight per-habit summary used for AI prompts — deliberately

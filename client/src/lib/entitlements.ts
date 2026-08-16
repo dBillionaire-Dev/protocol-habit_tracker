@@ -17,14 +17,33 @@ import { FREE_PLAN_HABIT_LIMIT, type PlanTier } from "shared/schema";
  * the route that sets it (api/billing/preview-plan), not just here, so a
  * stray/tampered value can never grant anything on its own.
  */
+const PLAN_RANK: Record<PlanTier, number> = { free: 0, pro: 1, premium_plus: 2 };
+
 export function effectivePlan(params: {
   realPlan: PlanTier;
   isSuperUser: boolean;
   previewPlan: PlanTier | null;
+  // Referral bonus — free access earned via referrals, entirely separate
+  // from real billing. Only ever upgrades effective access, never
+  // downgrades it: a paid Premium Plus user with a smaller Pro bonus
+  // active stays at Premium Plus.
+  referralBonusPlan?: PlanTier | null;
+  referralBonusActive?: boolean;
 }): PlanTier {
-  if (!params.isSuperUser) return params.realPlan;
-  if (params.previewPlan) return params.previewPlan;
-  return "premium_plus";
+  if (params.isSuperUser) {
+    if (params.previewPlan) return params.previewPlan;
+    return "premium_plus";
+  }
+
+  if (
+    params.referralBonusActive &&
+    params.referralBonusPlan &&
+    PLAN_RANK[params.referralBonusPlan] > PLAN_RANK[params.realPlan]
+  ) {
+    return params.referralBonusPlan;
+  }
+
+  return params.realPlan;
 }
 
 /**

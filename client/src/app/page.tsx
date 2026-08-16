@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { captureReferralCodeFromUrl } from "@/lib/referral-capture";
 
 export default function LandingPage() {
   const {
@@ -38,6 +39,11 @@ export default function LandingPage() {
     if (errParam) {
       window.history.replaceState({}, "", window.location.pathname);
     }
+
+    // Store any ?ref= code for attribution after a real signup — this
+    // is just local capture, not the actual attribution (which happens
+    // server-side once logged in, see layout-shell.tsx).
+    captureReferralCodeFromUrl();
   }, []);
 
   const handleEmailSubmit = async (e: React.FormEvent) => {

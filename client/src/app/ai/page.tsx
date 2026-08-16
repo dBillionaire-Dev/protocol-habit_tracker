@@ -81,7 +81,7 @@ function InsightsSection() {
         )}
         {code === "AI_ERROR" && (
           <p className="text-sm text-destructive">
-            Couldn't generate insights right now — try again in a moment.
+            Couldn't generate insights right now, try again in a moment.
           </p>
         )}
 
@@ -171,7 +171,7 @@ function PlanningSection() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Describe a goal, and AI will suggest protocols — nothing is created until you review and confirm.
+          Describe a goal, and AI will suggest protocols, nothing is created until you review and confirm.
         </p>
         <Textarea
           placeholder="e.g. I want to become more disciplined with programming"
@@ -190,7 +190,7 @@ function PlanningSection() {
           <p className="text-sm text-muted-foreground">AI features aren't configured on this deployment yet.</p>
         )}
         {code === "AI_ERROR" && (
-          <p className="text-sm text-destructive">Couldn't generate a plan right now — try again shortly.</p>
+          <p className="text-sm text-destructive">Couldn't generate a plan right now. Try again shortly.</p>
         )}
 
         {data && data.suggestions.length > 0 && (
@@ -222,7 +222,7 @@ function PlanningSection() {
                   )}
                   {s.frequency && s.frequency.toLowerCase() !== "daily" && (
                     <p className="text-[11px] text-amber-500 mt-0.5">
-                      Note: custom scheduling isn't supported yet — this will be created as a standard daily protocol.
+                      Note: custom scheduling isn't supported yet, this will be created as a standard daily protocol.
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1 italic">{s.rationale}</p>

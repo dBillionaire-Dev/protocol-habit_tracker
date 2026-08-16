@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles, FlaskConical, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,8 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useBillingStatus, useCancelSubscription, useSetPreviewPlan } from "@/hooks/use-billing";
 import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
+import { getPendingReferralCode, clearPendingReferralCode } from "@/lib/referral-capture";
+import { apiFetch } from "@/lib/api";
 import type { PlanTier } from "shared/schema";
 
 interface LayoutShellProps {
@@ -55,6 +57,31 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const isPaid = isPaidPlan(plan);
   const isSuperUser = billing?.isSuperUser ?? false;
   const isPreviewing = isSuperUser && !!billing?.previewPlan;
+
+  // Attempts to attribute a pending ?ref= code (captured on the landing
+  // page) once the user is confirmed logged in with a real account.
+  // Safe to fire on every mount across every page — the server-side
+  // attribution is idempotent (only ever applies once per account), and
+  // this clears local storage after a definitive response so it stops
+  // retrying once resolved.
+  const attributionAttempted = useRef(false);
+  useEffect(() => {
+    if (isGuest || !user || attributionAttempted.current) return;
+    const code = getPendingReferralCode();
+    if (!code) return;
+
+    attributionAttempted.current = true;
+    apiFetch("/api/referrals/attribute", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    })
+      .then(() => clearPendingReferralCode())
+      .catch(() => {
+        // Leave the code in storage to retry on a future mount rather
+        // than silently losing it on a transient network error.
+        attributionAttempted.current = false;
+      });
+  }, [isGuest, user]);
   const displayName =
     user?.firstName || user?.lastName
       ? `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim()
@@ -103,6 +130,12 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 Support
+              </Link>
+              <Link
+                href="/referrals"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Refer
               </Link>
             </nav>
           )}

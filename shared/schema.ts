@@ -17,6 +17,13 @@ export const habits = pgTable("habits", {
   type: text("type", { enum: HABIT_TYPES }).notNull(),
   baseTaskValue: integer("base_task_value"), // For build habits
   unit: text("unit"), // reps, minutes, pages, sessions
+  // Build protocols only (Pro/Premium Plus, "Custom Protocol Rules").
+  // Which days of the week this protocol is required: 0=Sunday .. 6=Saturday.
+  // null or empty = required every day (the original, default behavior —
+  // every existing habit has this unset, so nothing changes for them).
+  // A day NOT in this list is a rest day: no requirement, not counted as
+  // missed, doesn't count toward the penalty stack, doesn't break streaks.
+  scheduledDays: integer("scheduled_days").array(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   // Streak tracking
   currentStreak: integer("current_streak").default(0).notNull(),
@@ -86,6 +93,13 @@ export const insertHabitSchema = createInsertSchema(habits).omit({
 }).extend({
   type: z.enum(HABIT_TYPES),
   baseTaskValue: z.number().optional(),
+  scheduledDays: z
+    .array(z.number().int().min(0).max(6))
+    .max(7)
+    .optional()
+    .refine((days) => !days || new Set(days).size === days.length, {
+      message: "scheduledDays must not contain duplicate values",
+    }),
 });
 
 export const insertHabitEventSchema = createInsertSchema(habitEvents).omit({ 
@@ -116,6 +130,7 @@ export type HabitWithStatus = Habit & {
   todayConfirmed?: boolean; // For avoidance - clean day confirmed today
   todayTask?: number; // For build - required task amount
   todayCompleted?: boolean; // For build
+  todayIsRestDay?: boolean; // For build - today isn't a scheduled day, no action needed
   todayMissed?: boolean; // For build - marked as missed
   penaltyLevel?: number; // For build - stacking requirement multiplier, NOT debt
   // For build - missed-day debt, independent of penaltyLevel. See
@@ -130,3 +145,69 @@ export type BuildDebtSummary = {
   totalRepaidDays: number;
   remainingDebt: number;
 };
+
+// --- Custom Protocol Rules: day-of-week scheduling (Build only) ---
+//
+// Pure functions, deliberately dependency-free, so both the real
+// (Postgres-backed) storage layer and guest mode's localStorage layer
+// can share the exact same scheduling logic rather than maintaining two
+// implementations that could drift apart.
+
+export function isScheduledDay(
+  scheduledDays: number[] | null | undefined,
+  dateStr: string,
+): boolean {
+  if (!scheduledDays || scheduledDays.length === 0) return true; // default: every day
+  const dow = new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+  return scheduledDays.includes(dow);
+}
+
+/**
+ * The most recent scheduled day strictly before fromDateStr. Used so a
+ * streak's "was this consecutive" check compares against the previous
+ * REQUIRED day, not literally yesterday — a Mon-Fri protocol's streak
+ * shouldn't break just because the weekend happened.
+ */
+export function previousScheduledDate(
+  scheduledDays: number[] | null | undefined,
+  fromDateStr: string,
+): string {
+  const d = new Date(`${fromDateStr}T00:00:00Z`);
+  // Bounded loop: a full week always contains at least one scheduled day
+  // for any valid (non-empty) schedule, so 60 days is a generous safety
+  // margin, not a realistic case this would ever actually hit.
+  for (let i = 0; i < 60; i++) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const key = d.toISOString().split("T")[0];
+    if (isScheduledDay(scheduledDays, key)) return key;
+  }
+  const fallback = new Date(`${fromDateStr}T00:00:00Z`);
+  fallback.setUTCDate(fallback.getUTCDate() - 1);
+  return fallback.toISOString().split("T")[0];
+}
+
+/**
+ * Counts scheduled (required) days strictly between fromDateStr
+ * (exclusive) and toDateStr (exclusive) — this is "how many required
+ * days have passed since the last completion," which is what the
+ * penalty stack should actually be counting. For an every-day schedule
+ * this equals the plain calendar-day gap (identical to the original,
+ * pre-scheduling behavior), so nothing changes for habits without a
+ * custom schedule.
+ */
+export function countScheduledDaysBetween(
+  scheduledDays: number[] | null | undefined,
+  fromDateStr: string,
+  toDateStr: string,
+): number {
+  let count = 0;
+  const d = new Date(`${fromDateStr}T00:00:00Z`);
+  const end = new Date(`${toDateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  while (d < end) {
+    const key = d.toISOString().split("T")[0];
+    if (isScheduledDay(scheduledDays, key)) count++;
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return count;
+}

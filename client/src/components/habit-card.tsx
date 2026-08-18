@@ -256,7 +256,12 @@ export function HabitCard({ habit }: HabitCardProps) {
           <div className="flex items-center gap-2">
             <div>
               <CardTitle className="text-base font-bold tracking-tight">{habit.name}</CardTitle>
-              <p className="text-xs text-muted-foreground">Build</p>
+              <p className="text-xs text-muted-foreground">
+                Build
+                {habit.scheduledDays && habit.scheduledDays.length > 0 && habit.scheduledDays.length < 7 && (
+                  <span> · {formatScheduleDays(habit.scheduledDays)}</span>
+                )}
+              </p>
             </div>
             <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
           </div>
@@ -315,6 +320,10 @@ export function HabitCard({ habit }: HabitCardProps) {
           ) : habit.todayMissed ? (
             <div className="flex-1 bg-red-900/40 text-red-400 rounded-md py-2 px-4 text-center font-medium">
               Missed - penalty stacks tomorrow
+            </div>
+          ) : habit.todayIsRestDay ? (
+            <div className="flex-1 bg-muted/50 text-muted-foreground rounded-md py-2 px-4 text-center font-medium">
+              Rest day — not scheduled today
             </div>
           ) : isWindowOpen ? (
             <div className="flex gap-2 w-full">
@@ -460,4 +469,16 @@ function DeleteButton({ onDelete, isDeleting }: { onDelete: () => void; isDeleti
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+const SHORT_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function formatScheduleDays(days: number[]): string {
+  const sorted = [...days].sort();
+  // Common case: a single contiguous run (e.g. Mon-Fri) — show as a range.
+  const isContiguous = sorted.every((d, i) => i === 0 || d === sorted[i - 1] + 1);
+  if (isContiguous && sorted.length > 1) {
+    return `${SHORT_DAY_NAMES[sorted[0]]}-${SHORT_DAY_NAMES[sorted[sorted.length - 1]]}`;
+  }
+  return sorted.map((d) => SHORT_DAY_NAMES[d]).join(", ");
 }

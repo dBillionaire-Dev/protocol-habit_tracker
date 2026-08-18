@@ -31,6 +31,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { insertHabitSchema } from "shared/schema";
 import { useCreateHabit, ApiError } from "@/hooks/use-habits";
+import { useBillingStatus } from "@/hooks/use-billing";
+import { hasFeature } from "@/lib/entitlements";
 import { z } from "zod";
 
 const formSchema = z.object({
@@ -44,10 +46,15 @@ type FormValues = z.infer<typeof formSchema>;
 
 type LimitReason = "plan" | "guest" | null;
 
+const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"]; // index = day-of-week, 0=Sunday
+
 export function CreateHabitDialog() {
   const [open, setOpen] = useState(false);
   const [limitReason, setLimitReason] = useState<LimitReason>(null);
+  const [scheduledDays, setScheduledDays] = useState<number[]>([]); // empty = every day
   const { mutateAsync: createHabit, isPending } = useCreateHabit();
+  const { data: billing } = useBillingStatus();
+  const canCustomSchedule = hasFeature(billing?.plan ?? "free", "custom_rules");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -63,10 +70,15 @@ export function CreateHabitDialog() {
 
   async function onSubmit(data: FormValues) {
     try {
+      const payload =
+        data.type === "build" && canCustomSchedule && scheduledDays.length > 0 && scheduledDays.length < 7
+          ? { ...data, scheduledDays }
+          : data;
       // @ts-ignore
-      await createHabit(data);
+      await createHabit(payload);
       setOpen(false);
       setLimitReason(null);
+      setScheduledDays([]);
       form.reset();
     } catch (error) {
       if (error instanceof ApiError && error.code === "PLAN_LIMIT_REACHED") {
@@ -79,8 +91,14 @@ export function CreateHabitDialog() {
     }
   }
 
+  function toggleDay(day: number) {
+    setScheduledDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort(),
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setLimitReason(null); }}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setLimitReason(null); setScheduledDays([]); } }}>
       <DialogTrigger asChild>
         <button
           className="w-full border border-dashed border-border rounded-lg p-4 text-center hover-elevate transition-all cursor-pointer flex items-center justify-center gap-2 bg-white text-black dark:bg-white dark:text-black"
@@ -215,6 +233,44 @@ export function CreateHabitDialog() {
                     </FormItem>
                   )}
                 />
+              </div>
+            )}
+
+            {habitType === "build" && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">
+                  Days required
+                  {!canCustomSchedule && (
+                    <span className="text-xs text-muted-foreground font-normal ml-2">
+                      (Pro/Premium Plus for custom schedules)
+                    </span>
+                  )}
+                </p>
+                <div className="flex gap-1.5">
+                  {DAY_LABELS.map((label, day) => {
+                    const isSelected = scheduledDays.length === 0 || scheduledDays.includes(day);
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        disabled={!canCustomSchedule}
+                        onClick={() => toggleDay(day)}
+                        className={`h-9 w-9 rounded-full text-xs font-medium transition-colors ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        } ${!canCustomSchedule ? "opacity-50 cursor-not-allowed" : "hover-elevate"}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {scheduledDays.length === 0 || scheduledDays.length === 7
+                    ? "Required every day."
+                    : `Required on selected days only — other days are rest days (no requirement, no penalty).`}
+                </p>
               </div>
             )}
 

@@ -8,6 +8,7 @@ import {
 } from "shared/schema";
 import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
 import { effectivePlan } from "./entitlements";
+import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween } from "shared/schema";
 import type { PlanTier } from "shared/schema";
 
 export class DebtRepaymentError extends Error {}
@@ -197,6 +198,7 @@ export class DatabaseStorage implements IStorage {
         h.todayConfirmed = debt?.lastCleanDate === today;
       } else {
         // Build habit logic
+        h.todayIsRestDay = !isScheduledDay(habit.scheduledDays, today);
         const penalty = await this.calculatePenaltyLevel(habit.id, today);
         h.penaltyLevel = penalty;
         h.todayTask = (habit.baseTaskValue || 0) + ((habit.baseTaskValue || 0) * penalty);
@@ -371,6 +373,12 @@ export class DatabaseStorage implements IStorage {
     if (createdDate === today) {
       return 0;
     }
+
+    // Today isn't even a required day for this schedule — no penalty,
+    // no requirement (see HabitCard's "rest day" state).
+    if (!isScheduledDay(habit.scheduledDays, today)) {
+      return 0;
+    }
     
     // Get last completed status before today
     const [lastCompleted] = await db.select()
@@ -384,23 +392,20 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     if (lastCompleted) {
-      // Calculate days since last completion
-      const lastDate = new Date(lastCompleted.date);
-      const todayDate = new Date(today);
-      const diffTime = todayDate.getTime() - lastDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      // If completed yesterday (diff 1), penalty 0
-      return Math.max(0, diffDays - 1);
+      // Count only SCHEDULED days missed since the last completion — a
+      // rest day (per the habit's custom schedule) was never required,
+      // so it can't count against the penalty stack. For a habit with
+      // no custom schedule (every day required, the default), this is
+      // mathematically identical to the original plain calendar-day
+      // count — verified directly against the pre-scheduling formula.
+      return countScheduledDaysBetween(habit.scheduledDays, lastCompleted.date, today);
     } else {
-      // Never completed - count days since creation (excluding creation day)
-      const created = new Date(habit.createdAt);
-      created.setHours(0, 0, 0, 0);
-      const todayDate = new Date(today);
-      todayDate.setHours(0, 0, 0, 0);
-      const diffTime = todayDate.getTime() - created.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      // Created yesterday means 1 day passed, so 1 penalty
-      return Math.max(0, diffDays);
+      // Never completed - count scheduled days since creation
+      // (exclusive of creation day, inclusive of today).
+      const tomorrow = new Date(`${today}T00:00:00Z`);
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+      return countScheduledDaysBetween(habit.scheduledDays, createdDate, tomorrowStr);
     }
   }
 
@@ -413,15 +418,17 @@ export class DatabaseStorage implements IStorage {
     if (!habit) return;
     
     if (isSuccess) {
-      // Check if this is consecutive
-      const yesterday = new Date(date);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      // Check if this is consecutive. For a habit with no custom
+      // schedule, previousScheduledDate is always literal yesterday
+      // (identical to the original behavior) — this only differs for a
+      // Build habit with day-of-week scheduling, where a streak should
+      // survive a rest day rather than break over it.
+      const previousRequiredDay = previousScheduledDate(habit.scheduledDays, date);
       
       let newStreak = 1;
       let currentStreakStart = date; // Default: streak starts today
       
-      if (habit.lastStreakDate === yesterdayStr) {
+      if (habit.lastStreakDate === previousRequiredDay) {
         // Continuing streak
         newStreak = habit.currentStreak + 1;
         currentStreakStart = habit.currentStreakStart || date;

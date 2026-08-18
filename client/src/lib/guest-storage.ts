@@ -6,6 +6,7 @@ import type {
   HabitEvent,
   HabitType,
 } from "shared/schema";
+import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween } from "shared/schema";
 
 /**
  * Guest-mode data layer. Mirrors the same debt/streak/penalty rules as
@@ -49,6 +50,7 @@ interface GuestHabit {
   type: HabitType;
   baseTaskValue: number | null;
   unit: string | null;
+  scheduledDays: number[] | null; // build only — see shared/schema.ts's isScheduledDay etc.
   createdAt: string; // ISO
   currentStreak: number;
   longestStreak: number;
@@ -102,6 +104,7 @@ function getDailyStatus(
 function calculatePenaltyLevel(habit: GuestHabit, today: string): number {
   const createdDate = habit.createdAt.split("T")[0];
   if (createdDate === today) return 0;
+  if (!isScheduledDay(habit.scheduledDays, today)) return 0;
 
   const completedBefore = habit.dailyStatuses
     .filter((s) => s.completed && s.date < today)
@@ -109,35 +112,24 @@ function calculatePenaltyLevel(habit: GuestHabit, today: string): number {
   const lastCompleted = completedBefore[0];
 
   if (lastCompleted) {
-    const lastDate = new Date(lastCompleted.date);
-    const todayDate = new Date(today);
-    const diffDays = Math.floor(
-      (todayDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    return Math.max(0, diffDays - 1);
+    return countScheduledDaysBetween(habit.scheduledDays, lastCompleted.date, today);
   }
 
-  const created = new Date(habit.createdAt);
-  created.setHours(0, 0, 0, 0);
-  const todayDate = new Date(today);
-  todayDate.setHours(0, 0, 0, 0);
-  const diffDays = Math.floor(
-    (todayDate.getTime() - created.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  return Math.max(0, diffDays);
+  const tomorrow = new Date(`${today}T00:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split("T")[0];
+  return countScheduledDaysBetween(habit.scheduledDays, createdDate, tomorrowStr);
 }
 
 // Same rules as DatabaseStorage.updateStreak
 function updateStreak(habit: GuestHabit, date: string, isSuccess: boolean) {
   if (isSuccess) {
-    const yesterday = new Date(date);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split("T")[0];
+    const previousRequiredDay = previousScheduledDate(habit.scheduledDays, date);
 
     let newStreak = 1;
     let currentStreakStart = date;
 
-    if (habit.lastStreakDate === yesterdayStr) {
+    if (habit.lastStreakDate === previousRequiredDay) {
       newStreak = habit.currentStreak + 1;
       currentStreakStart = habit.currentStreakStart || date;
     }
@@ -208,6 +200,7 @@ function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
     todayTask: (habit.baseTaskValue || 0) + (habit.baseTaskValue || 0) * penaltyLevel,
     todayCompleted: status?.completed ?? false,
     todayMissed: status ? !status.completed : false,
+    todayIsRestDay: !isScheduledDay(habit.scheduledDays, today),
     totalMissedDays: debtSummary.totalMissedDays,
     totalRepaidDays: debtSummary.totalRepaidDays,
     remainingDebt: debtSummary.remainingDebt,
@@ -233,6 +226,7 @@ export const guestStorage = {
       type: input.type,
       baseTaskValue: input.baseTaskValue ?? null,
       unit: input.unit ?? null,
+      scheduledDays: input.scheduledDays ?? null,
       createdAt: now,
       currentStreak: 0,
       longestStreak: 0,

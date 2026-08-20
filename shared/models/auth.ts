@@ -1,4 +1,4 @@
-import { pgTable, varchar, timestamp, boolean, serial, integer, text, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, boolean, serial, integer, text, unique, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 // Profile table. Rows here are keyed 1:1 with Supabase's `auth.users.id`
 // (a uuid). Supabase Auth owns credentials/identities; this table only
@@ -82,6 +82,103 @@ export const subscriptions = pgTable("subscriptions", {
 
 export type Subscription = typeof subscriptions.$inferSelect;
 export type UpsertSubscription = typeof subscriptions.$inferInsert;
+
+// --- Subscription trials ---
+//
+// Each of the three trial types (spec section 1) can be used AT MOST
+// ONCE ever, per user — enforced by the unique(userId, trialType)
+// constraint below, not just app-side logic. A row existing at all means
+// that trial has been used; whether it's still ACTIVE is a separate
+// question (endsAt > now).
+//
+// Deliberately its own table rather than more columns on `subscriptions`:
+//   1. Three independent one-time-use flags (one per trial type) need
+//      their own uniqueness guarantee each, which maps cleanly onto one
+//      row per (user, type) rather than three parallel nullable column
+//      sets on a table that's otherwise one-row-per-user.
+//   2. It keeps a permanent, auditable record of every trial ever
+//      granted (when it started, when it ended, which reminders fired)
+//      instead of being overwritten/cleared when a trial ends.
+//
+// How this composes with billing (see entitlements.effectivePlan and
+// storage.getEffectivePlan, which is the ONLY place that should ever
+// read this table): starting a trial never touches `subscriptions.plan`
+// or `.status` at all — the real paid plan (or lack thereof) is
+// untouched throughout. A trial is purely a temporary, expiring
+// *bonus* on top of the real plan, exactly like referralBonusPlan. This
+// This
+// is what makes "Pro -> Premium Plus trial reverts to Pro, not Free" fall
+// out for free: effectivePlan always falls back to the real
+// (untouched-by-the-trial) plan once the trial's endsAt has passed.
+export const TRIAL_TYPES = [
+  "pro_from_free",
+  "premium_plus_from_free",
+  "premium_plus_from_pro",
+] as const;
+export type TrialType = typeof TRIAL_TYPES[number];
+
+export const TRIAL_CONFIG: Record<
+  TrialType,
+  { days: number; grantsPlan: Exclude<PlanTier, "free">; eligibleFromPlan: PlanTier }
+> = {
+  pro_from_free: { days: 7, grantsPlan: "pro", eligibleFromPlan: "free" },
+  premium_plus_from_free: { days: 3, grantsPlan: "premium_plus", eligibleFromPlan: "free" },
+  premium_plus_from_pro: { days: 7, grantsPlan: "premium_plus", eligibleFromPlan: "pro" },
+};
+
+export const TRIAL_REMINDER_KEYS = ["two_days", "one_day", "final"] as const;
+export type TrialReminderKey = typeof TRIAL_REMINDER_KEYS[number];
+
+// Which reminder checkpoints apply to each trial type, and how many
+// hours before `endsAt` each one should fire (see
+// lib/trial-reminders.ts). Spec section 1 gives different suggested
+// schedules per trial: the 7-day trials get a "2 days remaining" nudge
+// that the 3-day Premium-Plus-from-Free trial skips (too soon after
+// starting to be useful).
+export const TRIAL_REMINDER_SCHEDULE: Record<TrialType, readonly { key: TrialReminderKey; hoursBefore: number }[]> = {
+  pro_from_free: [
+    { key: "two_days", hoursBefore: 48 },
+    { key: "one_day", hoursBefore: 24 },
+    { key: "final", hoursBefore: 3 },
+  ],
+  premium_plus_from_free: [
+    { key: "one_day", hoursBefore: 24 },
+    { key: "final", hoursBefore: 3 },
+  ],
+  premium_plus_from_pro: [
+    { key: "two_days", hoursBefore: 48 },
+    { key: "one_day", hoursBefore: 24 },
+    { key: "final", hoursBefore: 3 },
+  ],
+};
+
+export const subscriptionTrials = pgTable(
+  "subscription_trials",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id").notNull().references(() => users.id),
+    trialType: varchar("trial_type", { enum: TRIAL_TYPES }).notNull(),
+    startedAt: timestamp("started_at").notNull().defaultNow(),
+    endsAt: timestamp("ends_at").notNull(),
+    // Individually-tracked booleans rather than an array column — small,
+    // fixed, known set of checkpoints (see TRIAL_REMINDER_KEYS), and
+    // booleans keep `lib/trial-reminders.ts` a plain read-check-write
+    // with no array-membership logic or driver-specific array typing.
+    twoDayReminderSentAt: timestamp("two_day_reminder_sent_at"),
+    oneDayReminderSentAt: timestamp("one_day_reminder_sent_at"),
+    finalReminderSentAt: timestamp("final_reminder_sent_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => ({
+    // The actual one-time-use enforcement: Postgres rejects a second
+    // insert for the same (userId, trialType) outright, so this can
+    // never be bypassed by a race condition or an app-logic bug.
+    onePerUserPerType: unique().on(table.userId, table.trialType),
+  }),
+);
+
+export type SubscriptionTrial = typeof subscriptionTrials.$inferSelect;
+export type InsertSubscriptionTrial = typeof subscriptionTrials.$inferInsert;
 
 // --- Referrals ---
 

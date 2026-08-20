@@ -2,7 +2,17 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, isGuestMode } from "@/lib/api";
-import type { PlanTier, BillingInterval } from "shared/schema";
+import type { PlanTier, BillingInterval, TrialType } from "shared/schema";
+
+interface ActiveTrialInfo {
+  trialType: TrialType;
+  startedAt: string;
+  endsAt: string;
+  grantsPlan: PlanTier;
+  // What the user's plan reverts to when this trial ends — "pro" for the
+  // Pro -> Premium Plus trial, "free" for the two Free-plan trials.
+  returnsToPlan: PlanTier;
+}
 
 interface BillingStatus {
   plan: PlanTier;
@@ -13,6 +23,10 @@ interface BillingStatus {
   isSuperUser: boolean;
   realPlan: PlanTier;
   previewPlan: PlanTier | null;
+  activeTrial: ActiveTrialInfo | null;
+  // Trial types this user could still start right now (not yet used,
+  // and their real plan matches what that trial requires).
+  eligibleTrials: TrialType[];
 }
 
 export function useBillingStatus() {
@@ -29,6 +43,8 @@ export function useBillingStatus() {
           isSuperUser: false,
           realPlan: "free",
           previewPlan: null,
+          activeTrial: null,
+          eligibleTrials: [],
         };
       }
       const res = await apiFetch("/api/billing/status");
@@ -89,6 +105,28 @@ export function useCancelSubscription() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+    },
+  });
+}
+
+// POST /api/billing/trial — start one of the three one-time trials (spec
+// section 1). Not available in guest mode (see the route) since a trial
+// needs a persistent account to attach its one-time-use record to.
+export function useStartTrial() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (trialType: TrialType) => {
+      const res = await apiFetch("/api/billing/trial", {
+        method: "POST",
+        body: JSON.stringify({ trialType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to start trial");
+      return data as { trialType: TrialType; startedAt: string; endsAt: string; grantsPlan: PlanTier };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
     },
   });
 }

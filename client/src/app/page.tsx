@@ -101,7 +101,7 @@ export default function LandingPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-8">
-            <Shield className="w-8 h-8" />
+            <Shield className="w-8 h-8" data-app-logo-icon />
             <span className="text-xl font-bold tracking-widest">PROTOCOL</span>
           </div>
 

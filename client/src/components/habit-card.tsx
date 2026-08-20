@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
-import { Check, Plus, Minus, Trash2, Flame } from "lucide-react";
+import { Check, Plus, Minus, Trash2, Flame, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
@@ -28,15 +28,21 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import type { HabitWithStatus } from "shared/schema";
+import { FREE_PLAN_HABIT_EDIT_WINDOW_MS } from "shared/schema";
 import {
   useLogHabitEvent,
   useConfirmCleanDay,
   useCompleteDaily,
   useDeleteHabit,
+  useUpdateHabit,
   useMarkMissed,
   useRepayDebt,
   ApiError,
 } from "@/hooks/use-habits";
+import { useBillingStatus } from "@/hooks/use-billing";
+import { hasFeature } from "@/lib/entitlements";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useConfirmationWindow } from "@/components/day-confirmation-card";
 
 interface HabitCardProps {
@@ -84,18 +90,65 @@ function Stepper({
 
 export function HabitCard({ habit }: HabitCardProps) {
   const deleteMutation = useDeleteHabit();
+  const updateMutation = useUpdateHabit();
   const logEventMutation = useLogHabitEvent();
   const confirmCleanMutation = useConfirmCleanDay();
   const completeMutation = useCompleteDaily();
   const missedMutation = useMarkMissed();
   const repayDebtMutation = useRepayDebt();
   const { isWindowOpen } = useConfirmationWindow();
+  const { data: billing } = useBillingStatus();
 
   const today = format(new Date(), "yyyy-MM-dd");
 
   const handleDelete = () => {
     deleteMutation.mutate(habit.id);
   };
+
+  // --- Habit editing: Free plan can only edit within 20 minutes of
+  // creation (server-enforced — see PATCH /api/habits/:id); Pro/Premium
+  // Plus can edit anytime. This is just the UI-side mirror of that rule
+  // for showing/disabling the button; the actual enforcement lives
+  // server-side regardless of what this computes. ---
+  const canEditAnytime = hasFeature(billing?.plan ?? "free", "unrestricted_habit_editing");
+  const editDeadlineMs = new Date(habit.createdAt).getTime() + FREE_PLAN_HABIT_EDIT_WINDOW_MS;
+  const isWithinEditWindow = Date.now() < editDeadlineMs;
+  const canEdit = canEditAnytime || isWithinEditWindow;
+
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editName, setEditName] = useState(habit.name);
+  const [editBaseTaskValue, setEditBaseTaskValue] = useState(String(habit.baseTaskValue ?? ""));
+  const [editUnit, setEditUnit] = useState(habit.unit ?? "");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  function openEditDialog() {
+    setEditName(habit.name);
+    setEditBaseTaskValue(String(habit.baseTaskValue ?? ""));
+    setEditUnit(habit.unit ?? "");
+    setEditError(null);
+    setEditDialogOpen(true);
+  }
+
+  function confirmEdit() {
+    const updates: { name?: string; baseTaskValue?: number; unit?: string } = {
+      name: editName.trim(),
+    };
+    if (habit.type === "build") {
+      const parsed = Number(editBaseTaskValue);
+      if (!Number.isNaN(parsed)) updates.baseTaskValue = parsed;
+      updates.unit = editUnit.trim();
+    }
+    updateMutation.mutate(
+      { id: habit.id, updates },
+      {
+        onSuccess: () => {
+          setEditDialogOpen(false);
+          toast({ title: "✓ Protocol updated" });
+        },
+        onError: (err) => setEditError(err instanceof ApiError ? err.message : "Something went wrong."),
+      },
+    );
+  }
 
   // --- Build-habit debt repayment state ---
   const remainingDebt = habit.remainingDebt ?? 0;
@@ -170,6 +223,7 @@ export function HabitCard({ habit }: HabitCardProps) {
     const isConfirmed = habit.todayConfirmed;
 
     return (
+      <>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -186,6 +240,7 @@ export function HabitCard({ habit }: HabitCardProps) {
                 <p className="text-xs text-muted-foreground">Avoidance</p>
               </div>
               <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
+              <EditButton onEdit={openEditDialog} canEdit={canEdit} canEditAnytime={canEditAnytime} />
             </div>
             <div className="flex items-center gap-1">
               <span className={cn(
@@ -253,6 +308,39 @@ export function HabitCard({ habit }: HabitCardProps) {
           </CardFooter>
         </Card>
       </motion.div>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Edit Protocol</DialogTitle>
+            {!canEditAnytime && (
+              <DialogDescription>
+                Free plan protocols can only be edited within 20 minutes of creation.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor={`edit-name-${habit.id}`}>Name</Label>
+              <Input
+                id={`edit-name-${habit.id}`}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={updateMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={confirmEdit} disabled={updateMutation.isPending || !editName.trim()}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
     );
   }
 
@@ -280,6 +368,7 @@ export function HabitCard({ habit }: HabitCardProps) {
               </p>
             </div>
             <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
+            <EditButton onEdit={openEditDialog} canEdit={canEdit} canEditAnytime={canEditAnytime} />
           </div>
           {remainingDebt > 0 && (
             <div className="flex items-center gap-1">
@@ -457,7 +546,77 @@ export function HabitCard({ habit }: HabitCardProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Edit Protocol</DialogTitle>
+            {!canEditAnytime && (
+              <DialogDescription>
+                Free plan protocols can only be edited within 20 minutes of creation.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor={`edit-name-${habit.id}`}>Name</Label>
+              <Input
+                id={`edit-name-${habit.id}`}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor={`edit-value-${habit.id}`}>Daily target</Label>
+                <Input
+                  id={`edit-value-${habit.id}`}
+                  type="number"
+                  value={editBaseTaskValue}
+                  onChange={(e) => setEditBaseTaskValue(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`edit-unit-${habit.id}`}>Unit</Label>
+                <Input
+                  id={`edit-unit-${habit.id}`}
+                  value={editUnit}
+                  onChange={(e) => setEditUnit(e.target.value)}
+                />
+              </div>
+            </div>
+            {editError && <p className="text-sm text-destructive">{editError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={updateMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={confirmEdit} disabled={updateMutation.isPending || !editName.trim()}>
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </motion.div>
+  );
+}
+
+function EditButton({ onEdit, canEdit, canEditAnytime }: { onEdit: () => void; canEdit: boolean; canEditAnytime: boolean }) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-6 w-6 text-muted-foreground hover:text-foreground disabled:opacity-40"
+      onClick={onEdit}
+      disabled={!canEdit}
+      title={
+        canEdit
+          ? "Edit protocol"
+          : "Free plan protocols can only be edited within 20 minutes of creation. Upgrade to Pro or Premium Plus to edit anytime."
+      }
+    >
+      <Pencil className="w-3 h-3" />
+    </Button>
   );
 }
 

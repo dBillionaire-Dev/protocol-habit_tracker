@@ -3,11 +3,26 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 // Timeline (non-reduced-motion):
+//   0.00 - 0.70s  entrance (fade/scale/settle)
+//   0.40 - 1.50s  ripples + glow pulse
+//   0.85 - 1.75s  settle wiggle
+//   1.75 - 2.15s  hold
+//   2.15 - 2.75s  "resolve" -- text fades, icon shrinks/slides onto the
+//                 real header logo's measured position, then fades as the
+//                 white backdrop fades with it, revealing the actual page
+//                 (which has been mounted underneath the whole time).
 const RESOLVE_AT = 2150;
 const SPLASH_DURATION = 2850;
 
+// True vector shield + wordmark -- same source used to generate the
+// manifest icons (protocol-mark*.svg). This is your original Lucide
+// "shield" path, filled directly rather than stroked, which is why it
+// has the rounded double-peak top rather than a single sharp point.
+// Rendered as real SVG (not a raster <Image>) so it's crisp at any size
+// on any screen -- the earlier PNG approach was inherently soft because
+// the source asset itself was a blurry raster.
 const shieldPath =
-  "M100 8 C 108 28, 128 40, 168 44 C 172 44.4, 175 48, 175 52 L 175 108 C 175 152, 148 178, 102 194.5 C 100.7 195, 99.3 195, 98 194.5 C 52 178, 25 152, 25 108 L 25 52 C 25 48, 28 44.4, 32 44 C 72 40, 92 28, 100 8 Z";
+  "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z";
 
 interface ProtocolSplashProps {
   onComplete: () => void;
@@ -34,6 +49,10 @@ export function ProtocolSplash({ onComplete }: ProtocolSplashProps) {
     let resolveTimer: number | undefined;
     if (!shouldReduceMotion) {
       resolveTimer = window.setTimeout(() => {
+        // Measure the real header/landing logo (data-app-logo-icon) right
+        // before the resolve phase starts, so the target is accurate even
+        // if fonts/images shifted layout after mount. Falls back to a
+        // plain fade (no morph) if the target isn't found for any reason.
         const target = document.querySelector<HTMLElement>("[data-app-logo-icon]");
         const iconBox = iconBoxRef.current;
         if (target && iconBox) {
@@ -72,6 +91,10 @@ export function ProtocolSplash({ onComplete }: ProtocolSplashProps) {
       }
       transition={{ duration: shouldReduceMotion ? 0.15 : 0.2, ease: [0.4, 0, 0.2, 1] }}
     >
+      {/* Backdrop is a separate layer from the icon so it can fade
+          independently during the resolve phase, revealing the real page
+          (already mounted underneath) right as the icon lands on the
+          real logo's position. */}
       <motion.div
         className="absolute inset-0 bg-white"
         initial={{ opacity: 1 }}
@@ -143,7 +166,7 @@ export function ProtocolSplash({ onComplete }: ProtocolSplashProps) {
           }
         >
           <motion.svg
-            viewBox="0 0 200 200"
+            viewBox="0 0 24 24"
             className="h-full w-full"
             xmlns="http://www.w3.org/2000/svg"
             initial={{ opacity: 0 }}
@@ -155,16 +178,16 @@ export function ProtocolSplash({ onComplete }: ProtocolSplashProps) {
               fill="#000000"
               initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              style={{ transformOrigin: "100px 100px" }}
+              style={{ transformOrigin: "12px 12px" }}
               transition={{ duration: shouldReduceMotion ? 0.15 : 0.55, ease: [0.16, 1, 0.3, 1] }}
             />
             <motion.text
-              x="100"
-              y="118"
+              x="12"
+              y="15.1"
               textAnchor="middle"
               fontFamily="Arial, Helvetica, sans-serif"
               fontWeight={700}
-              fontSize="26"
+              fontSize="3.05"
               fill="#ffffff"
               initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
               animate={{

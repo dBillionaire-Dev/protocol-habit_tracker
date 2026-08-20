@@ -1,13 +1,14 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { type InsertHabit, type HabitWithStatus } from "shared/schema";
+import { type InsertHabit, type UpdateHabitRequest, type HabitWithStatus } from "shared/schema";
 import { apiFetch, isGuestMode } from "@/lib/api";
-import { guestStorage, GuestLimitError, GuestDebtRepaymentError } from "@/lib/guest-storage";
+import { guestStorage, GuestLimitError, GuestDebtRepaymentError, GuestHabitEditError } from "@/lib/guest-storage";
 
 function getRepayDebtUrl(id: number): string { return `/api/habits/${id}/repay-debt`; }
 
 function getDeleteUrl(id: number): string { return `/api/habits/${id}`; }
+function getUpdateUrl(id: number): string { return `/api/habits/${id}`; }
 function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`; }
 function getConfirmCleanDayUrl(id: number): string { return `/api/habits/${id}/clean-day`; }
 function getCompleteDailyUrl(id: number): string { return `/api/habits/${id}/complete`; }
@@ -170,6 +171,40 @@ export function useCompleteDaily() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new ApiError(body.message || "Failed to update status", res.status);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
+    },
+  });
+}
+
+// PATCH /api/habits/:id — edit a habit. Free plan: only within 20 minutes
+// of creation (enforced server-side, see the PATCH route); Pro/Premium
+// Plus: anytime. Guest mode enforces the same 20-minute window locally.
+export function useUpdateHabit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: number; updates: UpdateHabitRequest }) => {
+      if (isGuestMode()) {
+        try {
+          return guestStorage.updateHabit(id, updates);
+        } catch (err) {
+          if (err instanceof GuestHabitEditError) {
+            throw new ApiError(err.message, 403, "EDIT_WINDOW_EXPIRED");
+          }
+          throw err;
+        }
+      }
+
+      const res = await apiFetch(getUpdateUrl(id), {
+        method: "PATCH",
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message || "Failed to update protocol", res.status, body.code);
       }
       return res.json();
     },

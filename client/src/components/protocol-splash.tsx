@@ -3,21 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
 // Timeline (non-reduced-motion):
-//   0.00 - 0.70s  entrance (fade/scale/settle)
-//   0.40 - 1.50s  ripples + glow pulse
-//   0.85 - 1.75s  settle wiggle
-//   1.75 - 2.15s  hold
-//   2.15 - 2.75s  "resolve" -- text fades, icon shrinks/slides onto the
-//                 real header logo's measured position, then fades as the
-//                 white backdrop fades with it, revealing the actual page
-//                 (which has been mounted underneath the whole time).
 const RESOLVE_AT = 2150;
 const SPLASH_DURATION = 2850;
 
-// True vector shield + wordmark -- same source used to generate the
-// manifest icons. Rendered as real SVG (not a raster <Image>) so it's
-// crisp at any size on any screen -- the earlier PNG approach was
-// inherently soft because the source asset itself was a blurry raster.
 const shieldPath =
   "M100 8 C 108 28, 128 40, 168 44 C 172 44.4, 175 48, 175 52 L 175 108 C 175 152, 148 178, 102 194.5 C 100.7 195, 99.3 195, 98 194.5 C 52 178, 25 152, 25 108 L 25 52 C 25 48, 28 44.4, 32 44 C 72 40, 92 28, 100 8 Z";
 
@@ -46,10 +34,6 @@ export function ProtocolSplash({ onComplete }: ProtocolSplashProps) {
     let resolveTimer: number | undefined;
     if (!shouldReduceMotion) {
       resolveTimer = window.setTimeout(() => {
-        // Measure the real header/landing logo (data-app-logo-icon) right
-        // before the resolve phase starts, so the target is accurate even
-        // if fonts/images shifted layout after mount. Falls back to a
-        // plain fade (no morph) if the target isn't found for any reason.
         const target = document.querySelector<HTMLElement>("[data-app-logo-icon]");
         const iconBox = iconBoxRef.current;
         if (target && iconBox) {
@@ -88,10 +72,6 @@ export function ProtocolSplash({ onComplete }: ProtocolSplashProps) {
       }
       transition={{ duration: shouldReduceMotion ? 0.15 : 0.2, ease: [0.4, 0, 0.2, 1] }}
     >
-      {/* Backdrop is a separate layer from the icon so it can fade
-          independently during the resolve phase, revealing the real page
-          (already mounted underneath) right as the icon lands on the
-          real logo's position. */}
       <motion.div
         className="absolute inset-0 bg-white"
         initial={{ opacity: 1 }}

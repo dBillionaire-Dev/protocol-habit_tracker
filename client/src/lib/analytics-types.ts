@@ -28,7 +28,11 @@ export interface AnalyticsSummary {
 // client hooks — kept import-safe (no `db` dependency) for the same
 // reason as the analytics types above.
 
-export type HistoryStatus = "completed" | "missed" | "clean" | "violation";
+// "repayment" covers a standalone Build-debt repayment recorded on a date
+// that otherwise has no dailyHabitStatus row (e.g. today's protocol hasn't
+// been confirmed yet, but the user still repaid an old missed day). See
+// buildHistoryEntries in lib/history.ts.
+export type HistoryStatus = "completed" | "missed" | "clean" | "violation" | "repayment";
 
 export interface HistoryEntry {
   date: string; // YYYY-MM-DD
@@ -54,6 +58,14 @@ export interface HistoryEntry {
   // (only the current count persists), so a historical running total
   // can't be reconstructed honestly either.
   penaltyInfo: number | null;
+  // Build only: whole days of Build debt repaid on this date (from
+  // build_debt_repayments), or null if none was recorded that day.
+  // Avoidance: always null — see buildDebtRepayments in shared/schema.ts.
+  debtRepaid: number | null;
+  // Build only: outstanding Build debt immediately after this entry,
+  // replayed chronologically (max(0, missed-to-date - repaid-to-date)).
+  // Avoidance: always null.
+  remainingDebtAfter: number | null;
 }
 
 export interface HistoryFilters {

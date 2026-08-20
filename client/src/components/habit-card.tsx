@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "@/hooks/use-toast";
 import type { HabitWithStatus } from "shared/schema";
 import {
   useLogHabitEvent,
@@ -118,7 +119,13 @@ export function HabitCard({ habit }: HabitCardProps) {
     repayDebtMutation.mutate(
       { id: habit.id, amount: repayAmount },
       {
-        onSuccess: () => setRepayDialogOpen(false),
+        onSuccess: (data) => {
+          setRepayDialogOpen(false);
+          toast({
+            title: "✓ Debt repayment recorded",
+            description: `${repayAmount} missed day${repayAmount !== 1 ? "s" : ""} repaid. ${data.remainingDebt} day${data.remainingDebt !== 1 ? "s" : ""} remaining.`,
+          });
+        },
         onError: (err) => setRepayError(err instanceof ApiError ? err.message : "Something went wrong."),
       },
     );
@@ -142,7 +149,16 @@ export function HabitCard({ habit }: HabitCardProps) {
     completeMutation.mutate(
       { id: habit.id, date: today, completed: true, debtRepayment },
       {
-        onSuccess: () => setCompleteDialogOpen(false),
+        onSuccess: (data) => {
+          setCompleteDialogOpen(false);
+          if (debtRepayment > 0) {
+            const remaining = data.debtSummary.remainingDebt;
+            toast({
+              title: "✓ Debt repayment recorded",
+              description: `${debtRepayment} missed day${debtRepayment !== 1 ? "s" : ""} repaid. ${remaining} day${remaining !== 1 ? "s" : ""} remaining.`,
+            });
+          }
+        },
         onError: (err) => setCompleteError(err instanceof ApiError ? err.message : "Something went wrong."),
       },
     );

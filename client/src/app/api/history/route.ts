@@ -7,7 +7,7 @@ import type { AnalyticsRange, HistoryStatus } from "@/lib/analytics-types";
 
 const VALID_RANGES: AnalyticsRange[] = ["7d", "30d", "90d", "6m", "1y", "all"];
 const BASIC_RANGES: AnalyticsRange[] = ["7d", "30d"]; // what "Basic history" (Free) allows
-const VALID_STATUSES: HistoryStatus[] = ["completed", "missed", "clean", "violation"];
+const VALID_STATUSES: HistoryStatus[] = ["completed", "missed", "clean", "violation", "repayment"];
 
 export async function GET(request: NextRequest) {
   const user = await resolveUser(request);

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { habits, habitEvents, dailyHabitStatus } from "shared/schema";
+import { habits, habitEvents, dailyHabitStatus, buildDebtRepayments } from "shared/schema";
 import { eq, and } from "drizzle-orm";
 import { rangeToStartDate } from "./analytics";
 import type { HistoryEntry, HistoryFilters } from "./analytics-types";
@@ -41,38 +41,84 @@ export async function buildHistoryEntries(
         .from(dailyHabitStatus)
         .where(eq(dailyHabitStatus.habitId, habit.id));
 
-      const filtered = rangeStart
-        ? rows.filter((r) => r.date >= toDateKey(rangeStart))
-        : rows;
+      // Every recorded repayment for this habit — NOT filtered by range
+      // yet, because remainingDebtAfter must be replayed from the very
+      // start of the habit's history to be accurate, even when the
+      // visible window is narrower. Filtering happens after the replay.
+      const repayments = await db
+        .select()
+        .from(buildDebtRepayments)
+        .where(eq(buildDebtRepayments.habitId, habit.id));
 
-      // Sort ascending to replay the streak accurately, then we'll
-      // reverse for the final newest-first output.
-      const sorted = [...filtered].sort((a, b) => (a.date < b.date ? -1 : 1));
+      const repaidByDate = new Map<string, number>();
+      for (const r of repayments) {
+        repaidByDate.set(r.date, (repaidByDate.get(r.date) ?? 0) + r.amount);
+      }
+
+      // Merge dailyHabitStatus dates with any repayment-only dates (a
+      // standalone repayment on a day that otherwise has no status row —
+      // see the "repayment" HistoryStatus case below) into one
+      // chronological timeline so debt can be replayed accurately.
+      const statusByDate = new Map(rows.map((r) => [r.date, r]));
+      const allDates = Array.from(
+        new Set([...rows.map((r) => r.date), ...repaidByDate.keys()]),
+      ).sort();
 
       let runningStreak = 0;
       let previousDate: string | null = null;
+      let runningMissed = 0;
+      let runningRepaid = 0;
 
-      for (const row of sorted) {
-        if (row.completed) {
-          const expectedPrev = new Date(`${row.date}T00:00:00Z`);
-          expectedPrev.setUTCDate(expectedPrev.getUTCDate() - 1);
-          const expectedPrevKey = toDateKey(expectedPrev);
-          runningStreak = previousDate === expectedPrevKey ? runningStreak + 1 : 1;
+      for (const date of allDates) {
+        const row = statusByDate.get(date);
+        const repaidToday = repaidByDate.get(date) ?? 0;
+
+        let status: typeof entries[number]["status"];
+        let completed = false;
+        let missed = false;
+        let penaltyInfo: number | null = null;
+
+        if (row) {
+          if (row.completed) {
+            const expectedPrev = new Date(`${date}T00:00:00Z`);
+            expectedPrev.setUTCDate(expectedPrev.getUTCDate() - 1);
+            const expectedPrevKey = toDateKey(expectedPrev);
+            runningStreak = previousDate === expectedPrevKey ? runningStreak + 1 : 1;
+            runningMissed += 0;
+          } else {
+            runningStreak = 0;
+            runningMissed += 1;
+          }
+          previousDate = date;
+          status = row.completed ? "completed" : "missed";
+          completed = row.completed;
+          missed = !row.completed;
+          penaltyInfo = row.penaltyLevel;
         } else {
-          runningStreak = 0;
+          // Repayment recorded with no matching dailyHabitStatus row for
+          // that date (e.g. repaid old debt before confirming today).
+          status = "repayment";
         }
-        previousDate = row.date;
+
+        runningRepaid += repaidToday;
+        const remainingDebtAfter = Math.max(0, runningMissed - runningRepaid);
+
+        // Now apply the range filter — the replay above needed the full,
+        // unfiltered history to compute an accurate running balance.
+        if (rangeStart && date < toDateKey(rangeStart)) continue;
 
         entries.push({
-          date: row.date,
+          date,
           habitId: habit.id,
           habitName: habit.name,
           type: "build",
-          status: row.completed ? "completed" : "missed",
-          completed: row.completed,
-          missed: !row.completed,
-          streak: runningStreak,
-          penaltyInfo: row.penaltyLevel,
+          status,
+          completed,
+          missed,
+          streak: row ? runningStreak : null,
+          penaltyInfo,
+          debtRepaid: repaidToday > 0 ? repaidToday : null,
+          remainingDebtAfter,
         });
       }
     } else {
@@ -107,6 +153,8 @@ export async function buildHistoryEntries(
           missed: !isClean,
           streak: null,
           penaltyInfo: violationCount,
+          debtRepaid: null,
+          remainingDebtAfter: null,
         });
       }
     }
@@ -131,6 +179,8 @@ export function toCSV(entries: HistoryEntry[]): string {
     "Missed",
     "Streak",
     "Penalty Info",
+    "Debt Repaid",
+    "Remaining Debt",
   ];
 
   const escapeCsv = (value: string): string => {
@@ -150,6 +200,8 @@ export function toCSV(entries: HistoryEntry[]): string {
       e.missed ? "yes" : "no",
       e.streak === null ? "" : String(e.streak),
       e.penaltyInfo === null ? "" : String(e.penaltyInfo),
+      e.debtRepaid === null ? "" : String(e.debtRepaid),
+      e.remainingDebtAfter === null ? "" : String(e.remainingDebtAfter),
     ]
       .map((v) => escapeCsv(String(v)))
       .join(","),

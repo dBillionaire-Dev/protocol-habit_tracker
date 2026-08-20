@@ -42,6 +42,8 @@ function statusBadge(status: HistoryStatus) {
     case "missed":
     case "violation":
       return <Badge variant="destructive">{status}</Badge>;
+    case "repayment":
+      return <Badge variant="outline" className="border-emerald-500/40 text-emerald-500">repayment</Badge>;
   }
 }
 
@@ -156,6 +158,7 @@ export default function HistoryPage() {
                 <SelectItem value="missed">Missed</SelectItem>
                 <SelectItem value="clean">Clean</SelectItem>
                 <SelectItem value="violation">Violation</SelectItem>
+                <SelectItem value="repayment">Repayment</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -209,6 +212,16 @@ export default function HistoryPage() {
                         {entry.penaltyInfo !== null && entry.penaltyInfo > 0 && (
                           <span className="text-xs text-orange-500 font-mono">
                             {entry.type === "build" ? `+${entry.penaltyInfo} penalty` : `${entry.penaltyInfo} event${entry.penaltyInfo !== 1 ? "s" : ""}`}
+                          </span>
+                        )}
+                        {entry.debtRepaid !== null && (
+                          <span className="text-xs text-emerald-500 font-mono">
+                            repaid {entry.debtRepaid}d
+                          </span>
+                        )}
+                        {entry.type === "build" && entry.remainingDebtAfter !== null && entry.remainingDebtAfter > 0 && (
+                          <span className="text-xs text-muted-foreground font-mono">
+                            debt: {entry.remainingDebtAfter}d
                           </span>
                         )}
                         {statusBadge(entry.status)}

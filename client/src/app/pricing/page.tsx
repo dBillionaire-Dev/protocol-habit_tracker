@@ -5,9 +5,12 @@ import Link from "next/link";
 import { Check, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useBillingStatus, useStartCheckout } from "@/hooks/use-billing";
+import { useBillingStatus, useStartCheckout, useStartTrial } from "@/hooks/use-billing";
 import { DISPLAY_PRICING, formatNaira } from "@/lib/paystack/plans";
 import { cn } from "@/lib/utils";
+import { TrialBanner } from "@/components/trial-banner";
+import { toast } from "@/hooks/use-toast";
+import { TRIAL_CONFIG, type TrialType } from "shared/schema";
 
 type Interval = "monthly" | "annual";
 
@@ -33,8 +36,28 @@ export default function PricingPage() {
   const [interval, setInterval] = useState<Interval>("monthly");
   const { data: billing } = useBillingStatus();
   const { mutate: startCheckout, isPending, variables } = useStartCheckout();
+  const { mutate: startTrial, isPending: isTrialPending, variables: trialVariables } = useStartTrial();
 
   const currentPlan = billing?.plan ?? "free";
+  const eligibleTrials = new Set(billing?.eligibleTrials ?? []);
+  // Only one trial can run at a time — while one is active, don't offer
+  // to start a different one (starting a second would just be rejected
+  // server-side; hiding the button here is the friendlier UX).
+  const canStartAnyTrial = !billing?.activeTrial;
+
+  function handleStartTrial(trialType: TrialType) {
+    startTrial(trialType, {
+      onSuccess: (data) => {
+        toast({
+          title: "✓ Trial started",
+          description: `Your ${TRIAL_CONFIG[trialType].days}-day trial ends ${new Date(data.endsAt).toLocaleDateString()}.`,
+        });
+      },
+      onError: (err) => {
+        toast({ title: "Couldn't start trial", description: err.message, variant: "destructive" });
+      },
+    });
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -48,6 +71,19 @@ export default function PricingPage() {
       </header>
 
       <main className="container max-w-5xl mx-auto px-4 py-12">
+        {billing?.activeTrial && (
+          <TrialBanner
+            trial={billing.activeTrial}
+            onUpgrade={() =>
+              startCheckout({
+                tier: billing.activeTrial!.grantsPlan as "pro" | "premium_plus",
+                interval,
+              })
+            }
+            isUpgradePending={isPending}
+          />
+        )}
+
         <div className="text-center space-y-3 mb-10">
           <h1 className="text-3xl font-bold tracking-tight">Choose your plan</h1>
           <p className="text-muted-foreground">Prices in NGN. Cancel anytime.</p>
@@ -128,13 +164,27 @@ export default function PricingPage() {
                   Current Plan
                 </Button>
               ) : (
-                <Button
-                  className="w-full"
-                  onClick={() => startCheckout({ tier: "pro", interval })}
-                  disabled={isPending}
-                >
-                  {isPending && variables?.tier === "pro" ? "Redirecting..." : "Choose Pro"}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    className="w-full"
+                    onClick={() => startCheckout({ tier: "pro", interval })}
+                    disabled={isPending}
+                  >
+                    {isPending && variables?.tier === "pro" ? "Redirecting..." : "Choose Pro"}
+                  </Button>
+                  {canStartAnyTrial && eligibleTrials.has("pro_from_free") && (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => handleStartTrial("pro_from_free")}
+                      disabled={isTrialPending}
+                    >
+                      {isTrialPending && trialVariables === "pro_from_free"
+                        ? "Starting..."
+                        : `Try free for ${TRIAL_CONFIG.pro_from_free.days} days`}
+                    </Button>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -169,13 +219,39 @@ export default function PricingPage() {
                   Current Plan
                 </Button>
               ) : (
-                <Button
-                  className="w-full bg-amber-600 hover:bg-amber-700"
-                  onClick={() => startCheckout({ tier: "premium_plus", interval })}
-                  disabled={isPending}
-                >
-                  {isPending && variables?.tier === "premium_plus" ? "Redirecting..." : "Choose Premium Plus"}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    className="w-full bg-amber-600 hover:bg-amber-700"
+                    onClick={() => startCheckout({ tier: "premium_plus", interval })}
+                    disabled={isPending}
+                  >
+                    {isPending && variables?.tier === "premium_plus" ? "Redirecting..." : "Choose Premium Plus"}
+                  </Button>
+                  {canStartAnyTrial && eligibleTrials.has("premium_plus_from_free") && (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => handleStartTrial("premium_plus_from_free")}
+                      disabled={isTrialPending}
+                    >
+                      {isTrialPending && trialVariables === "premium_plus_from_free"
+                        ? "Starting..."
+                        : `Try free for ${TRIAL_CONFIG.premium_plus_from_free.days} days`}
+                    </Button>
+                  )}
+                  {canStartAnyTrial && eligibleTrials.has("premium_plus_from_pro") && (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => handleStartTrial("premium_plus_from_pro")}
+                      disabled={isTrialPending}
+                    >
+                      {isTrialPending && trialVariables === "premium_plus_from_pro"
+                        ? "Starting..."
+                        : `Try free for ${TRIAL_CONFIG.premium_plus_from_pro.days} days`}
+                    </Button>
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>

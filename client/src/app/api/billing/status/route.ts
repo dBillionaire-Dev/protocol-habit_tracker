@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser, GUEST_USER_ID } from "@/lib/auth/require-user";
 import { storage } from "@/lib/storage";
-import { habitLimitFor, effectivePlan } from "@/lib/entitlements";
+import { habitLimitFor } from "@/lib/entitlements";
+import { TRIAL_TYPES, TRIAL_CONFIG, type TrialType } from "shared/schema";
 
 export async function GET(request: NextRequest) {
   const user = await resolveUser(request);
@@ -19,30 +20,58 @@ export async function GET(request: NextRequest) {
       isSuperUser: false,
       realPlan: "free" as const,
       previewPlan: null,
+      activeTrial: null,
+      eligibleTrials: [],
     });
   }
 
-  const [sub, habitCount] = await Promise.all([
+  const [sub, habitCount, plan, activeTrial, trialHistory] = await Promise.all([
     storage.getSubscription(user.id),
     storage.countActiveHabits(user.id),
+    // Single source of truth for effective plan (real plan + super-user
+    // preview + referral bonus + active trial) — see
+    // storage.getEffectivePlan / entitlements.effectivePlan. Previously
+    // this route computed plan inline and left out both the referral
+    // bonus and (now) trials; routing through the same helper every
+    // other plan-gated place uses keeps this endpoint from silently
+    // disagreeing with them again as more bonus types get added.
+    storage.getEffectivePlan(user.id, user.isSuperUser),
+    storage.getActiveTrial(user.id),
+    storage.getTrialHistory(user.id),
   ]);
 
   const isActive = sub?.status === "active" && sub.plan !== "free";
-  const realPlan = isActive ? sub.plan : "free";
-  const plan = effectivePlan({
-    realPlan,
-    isSuperUser: user.isSuperUser,
-    previewPlan: sub?.previewPlan ?? null,
-  });
+  const realPlan = isActive ? sub!.plan : "free";
+  const usedTrialTypes = new Set(trialHistory.map((t) => t.trialType));
+
+  // Which of the 3 trial types this user could still start: not already
+  // used, and their real (non-trial, non-bonus) plan matches what that
+  // trial requires. Deliberately checked against realPlan, not the
+  // effective plan — e.g. a Free user riding a referral-bonus "Pro"
+  // effective plan should still be offered the real Free->Pro trial
+  // slot, since their actual billing plan is still Free.
+  const eligibleTrials = TRIAL_TYPES.filter(
+    (t) => !usedTrialTypes.has(t) && TRIAL_CONFIG[t].eligibleFromPlan === realPlan,
+  );
 
   return NextResponse.json({
     plan,
-    billingInterval: isActive ? sub.billingInterval : null,
+    billingInterval: isActive ? sub!.billingInterval : null,
     status: sub?.status ?? null,
     habitCount,
     habitLimit: habitLimitFor(plan),
     isSuperUser: user.isSuperUser,
     realPlan,
     previewPlan: sub?.previewPlan ?? null,
+    activeTrial: activeTrial
+      ? {
+          trialType: activeTrial.trialType,
+          startedAt: activeTrial.startedAt,
+          endsAt: activeTrial.endsAt,
+          grantsPlan: TRIAL_CONFIG[activeTrial.trialType as TrialType].grantsPlan,
+          returnsToPlan: realPlan,
+        }
+      : null,
+    eligibleTrials,
   });
 }

@@ -1,4 +1,4 @@
-import { FREE_PLAN_HABIT_LIMIT, type PlanTier } from "shared/schema";
+import { FREE_PLAN_HABIT_LIMIT, TRIAL_CONFIG, type PlanTier, type TrialType } from "shared/schema";
 
 /**
  * Computes the plan actually used for feature gating, accounting for
@@ -29,21 +29,35 @@ export function effectivePlan(params: {
   // active stays at Premium Plus.
   referralBonusPlan?: PlanTier | null;
   referralBonusActive?: boolean;
+  // Active subscription trial (see shared/schema.ts TRIAL_CONFIG and
+  // storage.getEffectivePlan). Like the referral bonus, this ONLY ever
+  // grants access on top of realPlan, never replaces or downgrades it —
+  // which is exactly why "Pro -> Premium Plus trial reverts to Pro, not
+  // Free" works automatically: once trialActive is false, effectivePlan
+  // just falls back to realPlan, whatever that already was.
+  trialType?: TrialType | null;
+  trialActive?: boolean;
 }): PlanTier {
   if (params.isSuperUser) {
     if (params.previewPlan) return params.previewPlan;
     return "premium_plus";
   }
 
+  const candidates: PlanTier[] = [params.realPlan];
+
   if (
     params.referralBonusActive &&
     params.referralBonusPlan &&
     PLAN_RANK[params.referralBonusPlan] > PLAN_RANK[params.realPlan]
   ) {
-    return params.referralBonusPlan;
+    candidates.push(params.referralBonusPlan);
   }
 
-  return params.realPlan;
+  if (params.trialActive && params.trialType) {
+    candidates.push(TRIAL_CONFIG[params.trialType].grantsPlan);
+  }
+
+  return candidates.reduce((best, plan) => (PLAN_RANK[plan] > PLAN_RANK[best] ? plan : best));
 }
 
 /**

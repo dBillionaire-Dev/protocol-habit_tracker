@@ -5,6 +5,7 @@ import {
   type CreateHabitRequest, type HabitWithStatus, type BuildDebtSummary, type UpdateHabitRequest,
   users, type User, type UpsertUser,
   subscriptions, type Subscription, type UpsertSubscription,
+  subscriptionTrials, type SubscriptionTrial, type TrialType, TRIAL_CONFIG,
 } from "shared/schema";
 import { eq, and, desc, asc, sql, gte, lt, count } from "drizzle-orm";
 import { effectivePlan } from "./entitlements";
@@ -34,6 +35,9 @@ export interface IStorage {
   countActiveHabits(userId: string): Promise<number>;
   getEffectivePlan(userId: string, isSuperUser: boolean): Promise<PlanTier>;
   getHabitBriefs(userId: string): Promise<{ name: string; type: "build" | "avoidance"; currentStreak: number; longestStreak: number }[]>;
+  getTrialHistory(userId: string): Promise<SubscriptionTrial[]>;
+  getActiveTrial(userId: string): Promise<SubscriptionTrial | undefined>;
+  startTrial(userId: string, trialType: TrialType, realPlan: PlanTier): Promise<SubscriptionTrial>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -139,6 +143,71 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  // --- Subscription trials ---
+
+  // All trials this user has EVER started (used or currently active) —
+  // presence of a row for a given trialType means that trial has already
+  // been used, regardless of whether it's still active. Used both to
+  // render trial history/eligibility and to enforce one-time-use before
+  // even attempting the insert (the unique constraint is the real
+  // guarantee; this check just gives a friendlier error message).
+  async getTrialHistory(userId: string): Promise<SubscriptionTrial[]> {
+    return db.select().from(subscriptionTrials).where(eq(subscriptionTrials.userId, userId));
+  }
+
+  // The trial currently in effect for this user, if any (endsAt in the
+  // future). A user can only ever have one trial active at a time in
+  // practice — startTrial refuses to start a second one while an
+  // existing trial (of any type) is still active — but this doesn't
+  // assume that invariant; it just picks the one with the latest endsAt
+  // among any that happen to still be active.
+  async getActiveTrial(userId: string): Promise<SubscriptionTrial | undefined> {
+    const rows = await db
+      .select()
+      .from(subscriptionTrials)
+      .where(and(eq(subscriptionTrials.userId, userId), gte(subscriptionTrials.endsAt, new Date())));
+    return rows.sort((a, b) => b.endsAt.getTime() - a.endsAt.getTime())[0];
+  }
+
+  // Starts a trial for this user. Throws with a user-facing message on
+  // any ineligibility (already used, another trial already active,
+  // wrong starting plan) rather than silently no-op-ing, since the
+  // route needs a real error to surface to the UI.
+  async startTrial(userId: string, trialType: TrialType, realPlan: PlanTier): Promise<SubscriptionTrial> {
+    const config = TRIAL_CONFIG[trialType];
+    if (realPlan !== config.eligibleFromPlan) {
+      throw new Error(
+        `The ${trialType.replace(/_/g, " ")} trial requires being on the ${config.eligibleFromPlan} plan.`,
+      );
+    }
+
+    const active = await this.getActiveTrial(userId);
+    if (active) {
+      throw new Error("You already have an active trial. Only one trial can run at a time.");
+    }
+
+    const history = await this.getTrialHistory(userId);
+    if (history.some((t) => t.trialType === trialType)) {
+      throw new Error("You've already used this trial. Each trial is available once per account.");
+    }
+
+    const startedAt = new Date();
+    const endsAt = new Date(startedAt.getTime() + config.days * 24 * 60 * 60 * 1000);
+
+    try {
+      const [trial] = await db
+        .insert(subscriptionTrials)
+        .values({ userId, trialType, startedAt, endsAt })
+        .returning();
+      return trial;
+    } catch (err) {
+      // Belt-and-suspenders: if two requests race past the checks above,
+      // the DB's unique(userId, trialType) constraint is the actual
+      // backstop, surfaced here as the same friendly message.
+      throw new Error("You've already used this trial. Each trial is available once per account.");
+    }
+  }
+
   async countActiveHabits(userId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -151,7 +220,10 @@ export class DatabaseStorage implements IStorage {
   // billing plan, or a super user's full-access/preview override. See
   // entitlements.effectivePlan for the exact rules.
   async getEffectivePlan(userId: string, isSuperUser: boolean): Promise<PlanTier> {
-    const sub = await this.getSubscription(userId);
+    const [sub, activeTrial] = await Promise.all([
+      this.getSubscription(userId),
+      this.getActiveTrial(userId),
+    ]);
     const isActive = sub?.status === "active" && sub.plan !== "free";
     const realPlan: PlanTier = isActive ? sub!.plan : "free";
     const referralBonusActive = !!(sub?.referralBonusExpiresAt && sub.referralBonusExpiresAt.getTime() > Date.now());
@@ -161,6 +233,8 @@ export class DatabaseStorage implements IStorage {
       previewPlan: sub?.previewPlan ?? null,
       referralBonusPlan: sub?.referralBonusPlan ?? null,
       referralBonusActive,
+      trialType: activeTrial?.trialType ?? null,
+      trialActive: !!activeTrial,
     });
   }
 

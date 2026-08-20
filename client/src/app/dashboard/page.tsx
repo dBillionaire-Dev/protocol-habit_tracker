@@ -20,7 +20,6 @@ import type { HabitWithStatus } from "shared/schema";
 export default function DashboardPage() {
   const { data: habits, isLoading, error, refetch } = useHabits();
   const queryClient = useQueryClient();
-  const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -65,7 +64,6 @@ export default function DashboardPage() {
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    setRefreshKey((prev) => prev + 1);
     await queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
     await refetch();
     setIsRefreshing(false);
@@ -86,14 +84,23 @@ export default function DashboardPage() {
     };
   }, [handleRefresh]);
 
-  // Auto-refresh every 60 seconds
+  // Auto-refresh every 60 seconds. This must actually refetch the query
+  // (not just force a remount) — previously this bumped a `refreshKey`
+  // that was folded into every HabitCard's `key`, so every 60 seconds
+  // (and on every tab-focus/manual refresh) ALL habit cards were fully
+  // unmounted and remounted: their entrance animation replayed, any open
+  // dialog state was destroyed, and the resulting layout thrash is what
+  // caused visible "jumping". Habit identity now stays stable
+  // (key={habit.id} below) across refetches, so React just re-renders
+  // updated props in place — no remount, no animation replay, no lost
+  // scroll position.
   useEffect(() => {
     const interval = setInterval(() => {
-      setRefreshKey((prev) => prev + 1);
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
     }, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [queryClient]);
 
   if (isLoading) {
     return (
@@ -169,7 +176,13 @@ export default function DashboardPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <StreakCard habits={habits || []} />
           <div className="flex flex-col gap-4 h-full">
-            <DayConfirmationCard key={refreshKey} className="flex-1" />
+            {/* No `key` here on purpose — DayConfirmationCard manages its
+                own time-based state via useConfirmationWindow's internal
+                interval/visibilitychange listener, so it never needs to
+                be remounted from outside. Remounting it on every refresh
+                used to replay its entrance state and contributed to the
+                page feeling like it "jumped". */}
+            <DayConfirmationCard className="flex-1" />
             <CreateHabitDialog />
           </div>
         </div>
@@ -185,8 +198,13 @@ export default function DashboardPage() {
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {avoidanceHabits.length > 0 ? (
+              // key is ONLY habit.id — stable across refetches, so React
+              // reconciles props in place instead of unmounting and
+              // remounting the card (which previously replayed its
+              // entrance animation and could reset in-progress dialog
+              // state every 60s / tab-focus / manual refresh).
               avoidanceHabits.map((habit: HabitWithStatus) => (
-                <HabitCard key={`${habit.id}-${refreshKey}`} habit={habit} />
+                <HabitCard key={habit.id} habit={habit} />
               ))
             ) : (
               <EmptyState type="avoidance" />
@@ -206,7 +224,7 @@ export default function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {buildHabits.length > 0 ? (
               buildHabits.map((habit: HabitWithStatus) => (
-                <HabitCard key={`${habit.id}-${refreshKey}`} habit={habit} />
+                <HabitCard key={habit.id} habit={habit} />
               ))
             ) : (
               <EmptyState type="build" />

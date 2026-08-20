@@ -6,7 +6,7 @@ import type {
   HabitEvent,
   HabitType,
 } from "shared/schema";
-import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween } from "shared/schema";
+import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween, FREE_PLAN_HABIT_EDIT_WINDOW_MS } from "shared/schema";
 
 /**
  * Guest-mode data layer. Mirrors the same debt/streak/penalty rules as
@@ -36,6 +36,8 @@ export class GuestLimitError extends Error {
 }
 
 export class GuestDebtRepaymentError extends Error {}
+
+export class GuestHabitEditError extends Error {}
 
 interface GuestDailyStatus {
   date: string;
@@ -210,7 +212,16 @@ function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
 export const guestStorage = {
   getHabits(): HabitWithStatus[] {
     const today = todayStr();
-    return load().map((h) => toHabitWithStatus(h, today));
+    // Stable, deterministic ordering: earliest-created first. `load()`
+    // returns habits in localStorage array order (== push/creation
+    // order), and `id` (assigned via nextId, monotonically increasing)
+    // is an equivalent, explicit tiebreaker — mirrors the real DB
+    // layer's `ORDER BY id ASC` in storage.ts so guest and real accounts
+    // never visibly disagree on ordering.
+    return load()
+      .slice()
+      .sort((a, b) => a.id - b.id)
+      .map((h) => toHabitWithStatus(h, today));
   },
 
   createHabit(input: InsertHabit): HabitWithStatus {
@@ -247,6 +258,28 @@ export const guestStorage = {
 
   deleteHabit(id: number): void {
     save(load().filter((h) => h.id !== id));
+  },
+
+  // Guest sessions have no plan concept of their own — they're always
+  // treated as Free-tier-equivalent for the 20-minute edit window (see
+  // FREE_PLAN_HABIT_EDIT_WINDOW_MS), enforced here rather than trusting
+  // any client-side check, for the same reason the real backend enforces
+  // it server-side rather than just hiding the edit button.
+  updateHabit(id: number, updates: Partial<Pick<GuestHabit, "name" | "baseTaskValue" | "unit" | "scheduledDays">>): HabitWithStatus {
+    const habits = load();
+    const habit = habits.find((h) => h.id === id);
+    if (!habit) throw new Error("Habit not found");
+
+    const createdMs = new Date(habit.createdAt).getTime();
+    if (Date.now() - createdMs > FREE_PLAN_HABIT_EDIT_WINDOW_MS) {
+      throw new GuestHabitEditError(
+        "Editing is only available within 20 minutes of creating a protocol on the Free plan. Upgrade to Pro or Premium Plus to edit anytime.",
+      );
+    }
+
+    Object.assign(habit, updates);
+    save(habits);
+    return toHabitWithStatus(habit, todayStr());
   },
 
   logHabitEvent(id: number, notes?: string): HabitEvent {

@@ -101,7 +101,8 @@ export type FeatureKey =
   | "advanced_insights"
   | "ai_insights"
   | "ai_planning"
-  | "accountability";
+  | "accountability"
+  | "unrestricted_habit_editing";
 
 const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
   advanced_analytics: ["pro", "premium_plus"],
@@ -112,6 +113,10 @@ const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
   ai_insights: ["premium_plus"],
   ai_planning: ["premium_plus"],
   accountability: ["premium_plus"],
+  // Free users can only edit a habit within FREE_PLAN_HABIT_EDIT_WINDOW_MS
+  // of creating it (see requireHabitEditable). Pro/Premium Plus can edit
+  // anytime.
+  unrestricted_habit_editing: ["pro", "premium_plus"],
 };
 
 export function hasFeature(plan: PlanTier, feature: FeatureKey): boolean {

@@ -2,11 +2,11 @@ import { db } from "./db";
 import {
   habits, habitEvents, dailyHabitStatus, habitDebts, buildDebtRepayments,
   type InsertHabit, type Habit, type HabitEvent, type DailyHabitStatus, type HabitDebt,
-  type CreateHabitRequest, type HabitWithStatus, type BuildDebtSummary,
+  type CreateHabitRequest, type HabitWithStatus, type BuildDebtSummary, type UpdateHabitRequest,
   users, type User, type UpsertUser,
   subscriptions, type Subscription, type UpsertSubscription,
 } from "shared/schema";
-import { eq, and, desc, sql, gte, lt, count } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, lt, count } from "drizzle-orm";
 import { effectivePlan } from "./entitlements";
 import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween } from "shared/schema";
 import type { PlanTier } from "shared/schema";
@@ -39,6 +39,7 @@ export interface IStorage {
   getHabits(userId: string): Promise<HabitWithStatus[]>;
   getHabit(id: number): Promise<Habit | undefined>;
   createHabit(userId: string, habit: CreateHabitRequest): Promise<Habit>;
+  updateHabit(id: number, userId: string, updates: UpdateHabitRequest): Promise<Habit>;
   deleteHabit(id: number, userId: string): Promise<void>;
   
   // Avoidance
@@ -183,7 +184,14 @@ export class DatabaseStorage implements IStorage {
 
   // Habit Implementation
   async getHabits(userId: string): Promise<HabitWithStatus[]> {
-    const userHabits = await db.select().from(habits).where(eq(habits.userId, userId));
+    // Stable, deterministic ordering: earliest-created habit first. Without
+    // an explicit ORDER BY, Postgres makes no guarantee about row order
+    // across repeated SELECTs — habits could visibly "reorder" between
+    // one fetch and the next even though nothing about the habits
+    // themselves changed. `id` is a serial primary key, so ordering by it
+    // is equivalent to creation order but immune to any createdAt
+    // timestamp ties.
+    const userHabits = await db.select().from(habits).where(eq(habits.userId, userId)).orderBy(asc(habits.id));
     const today = new Date().toISOString().split('T')[0];
     
     const results: HabitWithStatus[] = [];
@@ -237,6 +245,22 @@ export class DatabaseStorage implements IStorage {
     }
     
     return newHabit;
+  }
+
+  // Editing itself is plan/time-restriction-agnostic here — that check
+  // (Free-plan 20-minute window vs. Pro/Premium Plus unrestricted) lives
+  // in the PATCH route (client/src/app/api/habits/[id]/route.ts), same
+  // as other plan-gated behavior elsewhere (e.g. history's hasFeature
+  // checks). This method only enforces ownership + persists the change.
+  async updateHabit(id: number, userId: string, updates: UpdateHabitRequest): Promise<Habit> {
+    const habit = await this.getHabit(id);
+    if (!habit || habit.userId !== userId) throw new Error("Unauthorized");
+
+    const [updated] = await db.update(habits)
+      .set(updates)
+      .where(eq(habits.id, id))
+      .returning();
+    return updated;
   }
 
   async deleteHabit(id: number, userId: string): Promise<void> {

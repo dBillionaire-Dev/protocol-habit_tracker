@@ -7,6 +7,13 @@ import { users } from "./models/auth";
 export * from "./models/auth";
 
 // Habit Types
+// Free-plan habits can only be edited within this window after creation
+// (see requireHabitEditable in lib/auth/require-user.ts, used by both the
+// PATCH /api/habits/:id route and — for parity — guest-storage.ts, since
+// guest sessions behave like Free for this purpose). Pro and Premium Plus
+// are exempt entirely; this constant only ever applies to Free/guest.
+export const FREE_PLAN_HABIT_EDIT_WINDOW_MS = 20 * 60 * 1000;
+
 export const HABIT_TYPES = ["avoidance", "build"] as const;
 export type HabitType = typeof HABIT_TYPES[number];
 
@@ -106,6 +113,25 @@ export const insertHabitEventSchema = createInsertSchema(habitEvents).omit({
   id: true, 
   timestamp: true 
 });
+
+// Editing an existing habit. Deliberately narrower than insertHabitSchema:
+// `type` is excluded — changing avoidance<->build after creation would
+// leave existing debt/penalty/history data (recorded under the old
+// type's assumptions) in an ambiguous state, so type is fixed at
+// creation and this only covers fields safe to change afterward.
+export const updateHabitSchema = z.object({
+  name: z.string().min(1).optional(),
+  baseTaskValue: z.number().optional(),
+  unit: z.string().optional(),
+  scheduledDays: z
+    .array(z.number().int().min(0).max(6))
+    .max(7)
+    .optional()
+    .refine((days) => !days || new Set(days).size === days.length, {
+      message: "scheduledDays must not contain duplicate values",
+    }),
+});
+export type UpdateHabitRequest = z.infer<typeof updateHabitSchema>;
 
 export const insertDailyStatusSchema = createInsertSchema(dailyHabitStatus).omit({ 
   id: true 

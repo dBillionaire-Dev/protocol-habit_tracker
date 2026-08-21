@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles,
   FlaskConical, HelpCircle, Menu, LayoutDashboard, BarChart3, History as HistoryIcon,
-  Sparkle, Users,
+  Sparkle, Users, KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,6 +41,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { useBillingStatus, useSetPreviewPlan } from "@/hooks/use-billing";
 import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
 import { ManageSubscriptionDialog } from "@/components/manage-subscription-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
 import { getPendingReferralCode, clearPendingReferralCode } from "@/lib/referral-capture";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -79,6 +89,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const [manageSubOpen, setManageSubOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const pathname = usePathname();
 
   const isGuest = user?.provider === "guest";
@@ -123,7 +134,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
       {/* Header */}
       <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
+          <Link href="/home" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
             <Shield className="w-5 h-5" />
             <span>PROTOCOL</span>
           </Link>
@@ -366,6 +377,23 @@ export function LayoutShell({ children }: LayoutShellProps) {
                   Support
                 </Link>
               </DropdownMenuItem>
+              {/* Spec section 14: only email/password accounts have a
+                  Protocol-side password to change — Google accounts
+                  authenticate entirely through Google and have nothing
+                  here to update. Guests have no real account at all. */}
+              {!isGuest && user?.provider === "email" && (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setMenuOpen(false);
+                    setChangePasswordOpen(true);
+                  }}
+                  data-testid="menu-item-change-password"
+                >
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Change Password
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => logout()} data-testid="menu-item-sign-out">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
@@ -389,6 +417,8 @@ export function LayoutShell({ children }: LayoutShellProps) {
           </div>
 
           <ManageSubscriptionDialog open={manageSubOpen} onOpenChange={setManageSubOpen} />
+
+          <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
@@ -454,5 +484,99 @@ export function LayoutShell({ children }: LayoutShellProps) {
         </div>
       </footer>
     </div>
+  );
+}
+
+const MIN_PASSWORD_LENGTH = 8;
+
+// Spec section 14's "Change Password" — for an already-signed-in
+// email/password user, distinct from the forgot-password flow (which
+// covers someone who's locked out and has no active session at all).
+// Calls the same useAuth().updatePassword mutation (Supabase's
+// updateUser({password}) just needs an active session either way, and
+// this dialog's user already has one).
+function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { updatePassword, isUpdatingPassword, updatePasswordError } = useAuth();
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [formError, setFormError] = useState("");
+
+  function handleSubmit() {
+    setFormError("");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setFormError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFormError("Passwords don't match.");
+      return;
+    }
+    updatePassword(password, {
+      onSuccess: () => {
+        setPassword("");
+        setConfirmPassword("");
+        onOpenChange(false);
+        toast({ title: "✓ Password updated" });
+      },
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          setPassword("");
+          setConfirmPassword("");
+          setFormError("");
+        }
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4" />
+            Change Password
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="new-password">New password</Label>
+            <Input
+              id="new-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={MIN_PASSWORD_LENGTH}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-new-password">Confirm new password</Label>
+            <Input
+              id="confirm-new-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={MIN_PASSWORD_LENGTH}
+            />
+          </div>
+          {(formError || updatePasswordError) && (
+            <p className="text-sm text-destructive">
+              {formError || (updatePasswordError instanceof Error ? updatePasswordError.message : "")}
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isUpdatingPassword}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isUpdatingPassword || !password || !confirmPassword}>
+            {isUpdatingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            Update Password
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

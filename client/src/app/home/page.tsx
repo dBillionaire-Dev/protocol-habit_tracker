@@ -53,7 +53,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/40">
         <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/home" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
+          <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
             <Shield className="w-5 h-5" />
             <span>PROTOCOL</span>
           </Link>
@@ -222,7 +222,7 @@ export default function HomePage() {
 
       <footer className="border-t border-border/40">
         <div className="container max-w-5xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-          <span>© {new Date().getFullYear()} Protocol</span>
+          <span><a href="https://nex.is-a.dev/" target="_blank" rel="noopener noreferrer">© {new Date().getFullYear()} Protocol</a></span>
           <div className="flex items-center gap-4">
             <Link href="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
             <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>

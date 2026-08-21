@@ -50,13 +50,13 @@ export default function PrivacyPage() {
         <Section title="1. What We Collect">
           <p>If you create an account, we collect:</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Your email address and authentication credentials (handled by Supabase Auth — we never see your raw password).</li>
+            <li>Your email address and authentication credentials (we never see your raw password).</li>
             <li>The habit protocols you create: names, types, schedules, completion/miss history, and repayment records.</li>
-            <li>Subscription and billing status (plan, billing interval, trial history) — actual payment details (card numbers, etc.) are handled entirely by Paystack and never touch our servers.</li>
+            <li>Subscription and billing status (plan, billing interval, trial history), actual payment details (card numbers, etc.) are handled entirely by Paystack and never touch our servers.</li>
             <li>Basic usage data needed to operate the app (e.g. timestamps of actions you take).</li>
           </ul>
           <p>
-            If you use Guest mode, none of the above is sent to us at all — your data is stored
+            If you use Guest mode, none of the above is sent to us at all, your data is stored
             only in your browser&apos;s local storage and is lost if you clear your browser data or
             switch devices.
           </p>
@@ -65,9 +65,9 @@ export default function PrivacyPage() {
         <Section title="2. How We Use Your Data">
           <p>We use the data described above to:</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Operate Protocol's core functionality — tracking your habits, streaks, and debt.</li>
+            <li>Operate Protocol's core functionality, tracking your habits, streaks, and debt.</li>
             <li>Process payments and manage your subscription, via Paystack.</li>
-            <li>Send transactional email — for example, subscription trial reminders — via our email provider, Resend.</li>
+            <li>Send transactional email, for example, subscription trial reminders, via our email provider, Resend.</li>
             <li>Respond to support requests you send us.</li>
             <li>Maintain the security and integrity of Protocol.</li>
           </ul>
@@ -77,10 +77,10 @@ export default function PrivacyPage() {
         <Section title="3. Who We Share Data With">
           <p>We share data only with the service providers necessary to run Protocol:</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li><span className="text-foreground">Supabase</span> — authentication and database hosting.</li>
-            <li><span className="text-foreground">Paystack</span> — payment processing for subscriptions.</li>
-            <li><span className="text-foreground">Resend</span> — delivery of transactional emails (e.g. trial reminders).</li>
-            <li><span className="text-foreground">Vercel</span> — application hosting.</li>
+            <li><span className="text-foreground">Supabase</span> - authentication and database hosting.</li>
+            <li><span className="text-foreground">Paystack</span> - payment processing for subscriptions.</li>
+            <li><span className="text-foreground">Resend</span> - delivery of transactional emails (e.g. trial reminders).</li>
+            <li><span className="text-foreground">Vercel</span> - application hosting.</li>
           </ul>
           <p>
             Each of these providers only receives the data necessary to perform their function and
@@ -107,7 +107,7 @@ export default function PrivacyPage() {
           <p>
             If you're in a jurisdiction with additional data protection rights (such as the EU/UK
             GDPR or similar laws), you may also have rights to data portability or to object to
-            certain processing — contact us using the details below and we&apos;ll do our best to
+            certain processing, contact us using the details below and we&apos;ll do our best to
             help.
           </p>
         </Section>
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
         <Section title="6. Security">
           <p>
             We rely on Supabase&apos;s infrastructure for authentication and database security, and
-            Paystack&apos;s PCI-compliant infrastructure for handling payment card data — we never
+            Paystack&apos;s PCI-compliant infrastructure for handling payment card data, we never
             store your card details ourselves. No system is perfectly secure, but we take
             reasonable measures to protect your data.
           </p>

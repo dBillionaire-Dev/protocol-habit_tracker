@@ -23,6 +23,12 @@ interface BillingStatus {
   isSuperUser: boolean;
   realPlan: PlanTier;
   previewPlan: PlanTier | null;
+  currentPeriodEnd: string | null;
+  // True when status is "cancelled" but currentPeriodEnd hasn't passed
+  // yet — the user keeps `plan` access until then (see
+  // cancelSubscriptionRecord in lib/billing.ts), after which they revert
+  // to Free automatically.
+  cancelAtPeriodEnd: boolean;
   activeTrial: ActiveTrialInfo | null;
   // Trial types this user could still start right now (not yet used,
   // and their real plan matches what that trial requires).
@@ -43,6 +49,8 @@ export function useBillingStatus() {
           isSuperUser: false,
           realPlan: "free",
           previewPlan: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
           activeTrial: null,
           eligibleTrials: [],
         };

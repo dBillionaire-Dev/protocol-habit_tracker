@@ -115,6 +115,17 @@ export function HabitCard({ habit }: HabitCardProps) {
   const isWithinEditWindow = Date.now() < editDeadlineMs;
   const canEdit = canEditAnytime || isWithinEditWindow;
 
+  // --- Premium Flexible Day Confirmation: Premium Plus bypasses the
+  // normal 9PM-midnight confirmation window entirely (server-enforced —
+  // see api/habits/[id]/clean-day/route.ts). This is the UI-side mirror
+  // for the Avoidance "Confirm Clean Day" action specifically; Build's
+  // "Execute Protocol" window isn't covered by this pass — see delivery
+  // notes. ---
+  const canConfirmAnytime = hasFeature(billing?.plan ?? "free", "flexible_confirmation");
+  const canConfirmCleanDay = isWindowOpen || canConfirmAnytime;
+  const [confirmCleanError, setConfirmCleanError] = useState<string | null>(null);
+  const [missedError, setMissedError] = useState<string | null>(null);
+
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState(habit.name);
   const [editBaseTaskValue, setEditBaseTaskValue] = useState(String(habit.baseTaskValue ?? ""));
@@ -292,18 +303,36 @@ export function HabitCard({ habit }: HabitCardProps) {
                 Clean day confirmed
               </Button>
             ) : (
-              <Button
-                className={cn(
-                  "flex-1",
-                  isWindowOpen && isClean
-                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                    : "bg-muted text-muted-foreground cursor-not-allowed"
+              <div className="flex-1 space-y-1.5">
+                <Button
+                  className={cn(
+                    "w-full",
+                    canConfirmCleanDay && isClean
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  )}
+                  onClick={() => {
+                    setConfirmCleanError(null);
+                    confirmCleanMutation.mutate(
+                      { id: habit.id, date: today },
+                      { onError: (err) => setConfirmCleanError(err instanceof ApiError ? err.message : "Something went wrong.") },
+                    );
+                  }}
+                  disabled={!canConfirmCleanDay || confirmCleanMutation.isPending || !isClean}
+                >
+                  {canConfirmCleanDay
+                    ? (isClean ? "Confirm Clean Day" : "Has Events Today")
+                    : "Window Closed"}
+                </Button>
+                {canConfirmAnytime && !isWindowOpen && (
+                  <p className="text-[11px] text-amber-500 text-center">
+                    Premium Plus: confirm anytime, not just 9PM–midnight
+                  </p>
                 )}
-                onClick={() => confirmCleanMutation.mutate({ id: habit.id, date: today })}
-                disabled={!isWindowOpen || confirmCleanMutation.isPending || !isClean}
-              >
-                {isWindowOpen ? (isClean ? "Confirm Clean Day" : "Has Events Today") : "Window Closed"}
-              </Button>
+                {confirmCleanError && (
+                  <p className="text-xs text-destructive text-center">{confirmCleanError}</p>
+                )}
+              </div>
             )}
           </CardFooter>
         </Card>
@@ -430,22 +459,38 @@ export function HabitCard({ habit }: HabitCardProps) {
             <div className="flex-1 bg-muted/50 text-muted-foreground rounded-md py-2 px-4 text-center font-medium">
               Rest day — not scheduled today
             </div>
-          ) : isWindowOpen ? (
-            <div className="flex gap-2 w-full">
-              <Button
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={openCompleteDialog}
-                disabled={completeMutation.isPending}
-              >
-                Execute Protocol
-              </Button>
-              <Button
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                onClick={() => missedMutation.mutate({ id: habit.id, date: today })}
-                disabled={missedMutation.isPending}
-              >
-                Missed
-              </Button>
+          ) : canConfirmCleanDay ? (
+            <div className="flex-1 space-y-1.5">
+              <div className="flex gap-2 w-full">
+                <Button
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={openCompleteDialog}
+                  disabled={completeMutation.isPending}
+                >
+                  Execute Protocol
+                </Button>
+                <Button
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => {
+                    setMissedError(null);
+                    missedMutation.mutate(
+                      { id: habit.id, date: today },
+                      { onError: (err) => setMissedError(err instanceof ApiError ? err.message : "Something went wrong.") },
+                    );
+                  }}
+                  disabled={missedMutation.isPending}
+                >
+                  Missed
+                </Button>
+              </div>
+              {canConfirmAnytime && !isWindowOpen && (
+                <p className="text-[11px] text-amber-500 text-center">
+                  Premium Plus: confirm anytime, not just 9PM–midnight
+                </p>
+              )}
+              {missedError && (
+                <p className="text-xs text-destructive text-center">{missedError}</p>
+              )}
             </div>
           ) : (
             <div className="flex-1 bg-muted text-muted-foreground rounded-md py-2 px-4 text-center font-medium">

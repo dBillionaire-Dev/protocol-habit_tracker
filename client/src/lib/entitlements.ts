@@ -116,7 +116,8 @@ export type FeatureKey =
   | "ai_insights"
   | "ai_planning"
   | "accountability"
-  | "unrestricted_habit_editing";
+  | "unrestricted_habit_editing"
+  | "flexible_confirmation";
 
 const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
   advanced_analytics: ["pro", "premium_plus"],
@@ -131,6 +132,11 @@ const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
   // of creating it (see requireHabitEditable). Pro/Premium Plus can edit
   // anytime.
   unrestricted_habit_editing: ["pro", "premium_plus"],
+  // Premium Plus only: bypasses the normal 9PM-11:59PM confirmation
+  // window entirely (see the server-side check in
+  // api/habits/[id]/clean-day/route.ts and useConfirmationWindow in
+  // day-confirmation-card.tsx). Free and Pro remain window-restricted.
+  flexible_confirmation: ["premium_plus"],
 };
 
 export function hasFeature(plan: PlanTier, feature: FeatureKey): boolean {

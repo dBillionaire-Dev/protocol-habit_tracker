@@ -2,9 +2,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles, FlaskConical, HelpCircle } from "lucide-react";
+import { usePathname } from "next/navigation";
+import {
+  LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles,
+  FlaskConical, HelpCircle, Menu, LayoutDashboard, BarChart3, History as HistoryIcon,
+  Sparkle, Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Sheet,
+  SheetTrigger,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,10 +38,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { useBillingStatus, useCancelSubscription, useSetPreviewPlan } from "@/hooks/use-billing";
+import { useBillingStatus, useSetPreviewPlan } from "@/hooks/use-billing";
 import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
+import { ManageSubscriptionDialog } from "@/components/manage-subscription-dialog";
 import { getPendingReferralCode, clearPendingReferralCode } from "@/lib/referral-capture";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { PlanTier } from "shared/schema";
 
 interface LayoutShellProps {
@@ -43,14 +57,29 @@ function initials(firstName?: string | null, lastName?: string | null, email?: s
   return email?.trim()?.[0]?.toUpperCase() ?? "?";
 }
 
+// Same 6 links as the desktop nav below (kept as a separate, explicit
+// list rather than sharing markup, since the desktop version renders
+// inline `<Link>`s styled for a horizontal bar and this renders full-width
+// rows with icons — different enough visually that a shared array of
+// plain {href,label} pairs is clearer than forcing one markup template to
+// serve both).
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/history", label: "History", icon: HistoryIcon },
+  { href: "/ai", label: "AI", icon: Sparkle },
+  { href: "/referrals", label: "Referrals", icon: Users },
+] as const;
+
 export function LayoutShell({ children }: LayoutShellProps) {
   const { user, logout, deleteAccount, isDeletingAccount, deleteAccountError } = useAuth();
   const { data: billing } = useBillingStatus();
-  const { mutate: cancelSubscription, isPending: isCancelling } = useCancelSubscription();
   const { mutate: setPreviewPlan, isPending: isSettingPreview } = useSetPreviewPlan();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [manageSubOpen, setManageSubOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const pathname = usePathname();
 
   const isGuest = user?.provider === "guest";
   const plan = billing?.plan ?? "free";
@@ -95,7 +124,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
       <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
-            <Shield className="w-5 h-5" data-app-logo-icon />
+            <Shield className="w-5 h-5" />
             <span>PROTOCOL</span>
           </Link>
 
@@ -140,7 +169,103 @@ export function LayoutShell({ children }: LayoutShellProps) {
             </nav>
           )}
 
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <div className="flex items-center gap-1">
+            {/* Mobile hamburger — spec section 10. Desktop nav above is
+                `hidden sm:flex`, which means below that breakpoint it was
+                simply invisible with NO alternative access at all: mobile
+                users had no way to reach Analytics, History, AI, or
+                Referrals except by typing the URL directly. This is the
+                fix, not just a cosmetic addition. `sm:hidden` mirrors the
+                desktop nav's own breakpoint so exactly one of the two is
+                ever visible at a time. */}
+            {!isGuest && user && (
+              <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="sm:hidden"
+                    aria-label="Open navigation menu"
+                    data-testid="button-mobile-menu"
+                  >
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-72 flex flex-col">
+                  <SheetHeader>
+                    <SheetTitle className="flex items-center gap-2">
+                      <Shield className="w-5 h-5" />
+                      PROTOCOL
+                    </SheetTitle>
+                  </SheetHeader>
+                  <nav className="flex flex-col gap-1 mt-4" aria-label="Main navigation">
+                    {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+                      const active = pathname === href;
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setMobileNavOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                            active
+                              ? "bg-muted text-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          )}
+                          aria-current={active ? "page" : undefined}
+                        >
+                          <Icon className="w-4 h-4" />
+                          {label}
+                        </Link>
+                      );
+                    })}
+                  </nav>
+
+                  <div className="mt-auto flex flex-col gap-1 pt-4 border-t border-border/40">
+                    {!isPaid && (
+                      <Link
+                        href="/pricing"
+                        onClick={() => setMobileNavOpen(false)}
+                        className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Upgrade Plan
+                      </Link>
+                    )}
+                    <button
+                      onClick={() => {
+                        setMobileNavOpen(false);
+                        setManageSubOpen(true);
+                      }}
+                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-left"
+                    >
+                      <Crown className="w-4 h-4" />
+                      Manage Subscription
+                    </button>
+                    <Link
+                      href="/support"
+                      onClick={() => setMobileNavOpen(false)}
+                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <HelpCircle className="w-4 h-4" />
+                      Support
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setMobileNavOpen(false);
+                        logout();
+                      }}
+                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-left"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            )}
+
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
@@ -222,12 +347,12 @@ export function LayoutShell({ children }: LayoutShellProps) {
                   </Link>
                 </DropdownMenuItem>
               )}
-              {!isGuest && isPaid && (
+              {!isGuest && (
                 <DropdownMenuItem
                   onSelect={(e) => {
                     e.preventDefault();
                     setMenuOpen(false);
-                    setCancelConfirmOpen(true);
+                    setManageSubOpen(true);
                   }}
                   data-testid="menu-item-manage-subscription"
                 >
@@ -261,41 +386,9 @@ export function LayoutShell({ children }: LayoutShellProps) {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
 
-          <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Cancel Pro subscription?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  You'll keep Pro access until your current billing period
-                  ends, then drop back to the free plan (3 active
-                  protocols). Your existing protocols beyond the free
-                  limit won't be deleted, but you won't be able to create
-                  new ones until you're back under the limit or resubscribe.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isCancelling}>Keep {planDisplayName(plan)}</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={(e) => {
-                    e.preventDefault();
-                    cancelSubscription(undefined, { onSuccess: () => setCancelConfirmOpen(false) });
-                  }}
-                  disabled={isCancelling}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {isCancelling ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Cancelling...
-                    </>
-                  ) : (
-                    "Cancel subscription"
-                  )}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <ManageSubscriptionDialog open={manageSubOpen} onOpenChange={setManageSubOpen} />
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>

@@ -9,9 +9,6 @@ import { pgTable, varchar, timestamp, boolean, serial, integer, text, unique, ty
 // upsert the first time a verified user hits the API (see
 // server/middleware/require-user.ts), so referential integrity is
 // enforced in application code rather than the database.
-export const USER_STATUSES = ["active", "suspended"] as const;
-export type UserStatus = typeof USER_STATUSES[number];
-
 export const users = pgTable("users", {
   id: varchar("id").primaryKey(), // matches auth.users.id (uuid as text)
   email: varchar("email").unique(),
@@ -20,10 +17,6 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   showOnboarding: varchar("show_onboarding").default("true"),
-  // Admin-controlled. Suspended users are blocked at resolveUser() --
-  // their session still exists with Supabase, but every API route treats
-  // them as unauthenticated. See lib/admin/storage.ts suspendUser/restoreUser.
-  status: varchar("status", { enum: USER_STATUSES }).notNull().default("active"),
   // Full access to every feature/tier regardless of billing status, for
   // internal testing. Set automatically on login based on the
   // SUPER_USER_EMAILS env var allow-list (see require-user.ts) — not
@@ -142,20 +135,29 @@ export type TrialReminderKey = typeof TRIAL_REMINDER_KEYS[number];
 // schedules per trial: the 7-day trials get a "2 days remaining" nudge
 // that the 3-day Premium-Plus-from-Free trial skips (too soon after
 // starting to be useful).
+// Hobby-plan-safe: Vercel Hobby restricts cron jobs to once per day (see
+// vercel.json), so every checkpoint here MUST use a window at least as
+// wide as 24h, or a once-daily cron could skip right past it. two_days
+// (48h window) and one_day (24h window) both satisfy that — a cron
+// running exactly once every 24h is guaranteed to land inside any
+// 24h-or-wider window before endsAt. A tight "final hours" checkpoint
+// (e.g. 3 hours before) does NOT satisfy this and was removed from the
+// active schedule below for that reason — it could silently never fire.
+// TrialReminderKey/the finalReminderSentAt column are left in place
+// rather than deleted, so a "final" checkpoint can be added back safely
+// if this project ever moves to Vercel Pro (which allows per-minute
+// cron).
 export const TRIAL_REMINDER_SCHEDULE: Record<TrialType, readonly { key: TrialReminderKey; hoursBefore: number }[]> = {
   pro_from_free: [
     { key: "two_days", hoursBefore: 48 },
     { key: "one_day", hoursBefore: 24 },
-    { key: "final", hoursBefore: 3 },
   ],
   premium_plus_from_free: [
     { key: "one_day", hoursBefore: 24 },
-    { key: "final", hoursBefore: 3 },
   ],
   premium_plus_from_pro: [
     { key: "two_days", hoursBefore: 48 },
     { key: "one_day", hoursBefore: 24 },
-    { key: "final", hoursBefore: 3 },
   ],
 };
 

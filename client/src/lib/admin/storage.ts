@@ -3,6 +3,9 @@ import {
   users,
   subscriptions,
   habits,
+  habitDebts,
+  dailyHabitStatus,
+  buildDebtRepayments,
   referrals,
   referralRewards,
   adminAuditLog,
@@ -369,4 +372,87 @@ export async function listAuditLog(limit: number, offset: number): Promise<{ row
     db.select({ total: count() }).from(adminAuditLog),
   ]);
   return { rows, total };
+}
+
+// ---------------------------------------------------------------------------
+// Habit analytics
+// ---------------------------------------------------------------------------
+// Aggregate, product-level numbers only -- never surfaces an individual
+// user's habit names, notes, or history here. See lib/admin/storage.ts's
+// getUserDetail for the one place a specific user's habit *count* (not
+// content) is shown, gated behind opening that user's own detail page.
+
+export interface HabitAnalytics {
+  avgHabitsPerUser: number;
+  avgCompletionRate: number; // build habits only -- % of logged days completed
+  avgStreak: number; // days, across all habits of both types
+  buildPercent: number;
+  avoidancePercent: number;
+  usersWithActiveDebtPercent: number;
+}
+
+export async function getHabitAnalytics(): Promise<HabitAnalytics> {
+  const [[{ totalUsers }], [{ totalHabits }], typeCounts, [{ avgStreak }], completionRows] = await Promise.all([
+    db.select({ totalUsers: count() }).from(users),
+    db.select({ totalHabits: count() }).from(habits),
+    db.select({ type: habits.type, count: count() }).from(habits).groupBy(habits.type),
+    db
+      .select({ avgStreak: sql<number>`COALESCE(AVG(${habits.currentStreak}), 0)`.mapWith(Number) })
+      .from(habits),
+    db
+      .select({ completed: dailyHabitStatus.completed, count: count() })
+      .from(dailyHabitStatus)
+      .groupBy(dailyHabitStatus.completed),
+  ]);
+
+  const buildCount = typeCounts.find((t) => t.type === "build")?.count ?? 0;
+  const avoidanceCount = typeCounts.find((t) => t.type === "avoidance")?.count ?? 0;
+
+  const completedDays = completionRows.find((r) => r.completed)?.count ?? 0;
+  const totalLoggedDays = completionRows.reduce((total, r) => total + r.count, 0);
+
+  // Active debt: avoidance habits with debtCount > 0, plus build habits
+  // where missed days outstrip repayments. See buildDebtRepayments's
+  // comment in shared/schema.ts for the totalMissed - totalRepaid formula
+  // this mirrors exactly.
+  const [avoidanceDebtRows, buildHabitRows, missedByHabit, repaidByHabit] = await Promise.all([
+    db
+      .select({ userId: habits.userId })
+      .from(habitDebts)
+      .innerJoin(habits, eq(habits.id, habitDebts.habitId))
+      .where(sql`${habitDebts.debtCount} > 0`),
+    db.select({ id: habits.id, userId: habits.userId }).from(habits).where(eq(habits.type, "build")),
+    db
+      .select({ habitId: dailyHabitStatus.habitId, missed: count() })
+      .from(dailyHabitStatus)
+      .where(eq(dailyHabitStatus.completed, false))
+      .groupBy(dailyHabitStatus.habitId),
+    db
+      .select({
+        habitId: buildDebtRepayments.habitId,
+        repaid: sql<number>`COALESCE(SUM(${buildDebtRepayments.amount}), 0)`.mapWith(Number),
+      })
+      .from(buildDebtRepayments)
+      .groupBy(buildDebtRepayments.habitId),
+  ]);
+
+  const missedMap = new Map(missedByHabit.map((r) => [r.habitId, r.missed]));
+  const repaidMap = new Map(repaidByHabit.map((r) => [r.habitId, r.repaid]));
+
+  const usersWithDebt = new Set<string>();
+  for (const row of avoidanceDebtRows) usersWithDebt.add(row.userId);
+  for (const h of buildHabitRows) {
+    const missed = missedMap.get(h.id) ?? 0;
+    const repaid = repaidMap.get(h.id) ?? 0;
+    if (missed - repaid > 0) usersWithDebt.add(h.userId);
+  }
+
+  return {
+    avgHabitsPerUser: totalUsers > 0 ? Math.round((totalHabits / totalUsers) * 10) / 10 : 0,
+    avgCompletionRate: totalLoggedDays > 0 ? Math.round((completedDays / totalLoggedDays) * 1000) / 10 : 0,
+    avgStreak: Math.round(avgStreak * 10) / 10,
+    buildPercent: totalHabits > 0 ? Math.round((buildCount / totalHabits) * 1000) / 10 : 0,
+    avoidancePercent: totalHabits > 0 ? Math.round((avoidanceCount / totalHabits) * 1000) / 10 : 0,
+    usersWithActiveDebtPercent: totalUsers > 0 ? Math.round((usersWithDebt.size / totalUsers) * 1000) / 10 : 0,
+  };
 }

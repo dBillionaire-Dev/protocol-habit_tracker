@@ -253,7 +253,16 @@ export class DatabaseStorage implements IStorage {
       this.getSubscription(userId),
       this.getActiveTrial(userId),
     ]);
-    const isActive = sub?.status === "active" && sub.plan !== "free";
+    // A cancelled subscription still counts as active through the end of
+    // the period already paid for (see cancelSubscriptionRecord in
+    // lib/billing.ts) — this is what makes "keep access until period
+    // ends" true rather than the previous immediate-downgrade bug.
+    // After currentPeriodEnd passes, this naturally evaluates to false
+    // with no cron needed, same lazy-expiry pattern as trials/referral
+    // bonuses.
+    const inCancelledGracePeriod =
+      sub?.status === "cancelled" && !!sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() > Date.now();
+    const isActive = (sub?.status === "active" || inCancelledGracePeriod) && sub?.plan !== "free";
     const realPlan: PlanTier = isActive ? sub!.plan : "free";
     const referralBonusActive = !!(sub?.referralBonusExpiresAt && sub.referralBonusExpiresAt.getTime() > Date.now());
     return effectivePlan({

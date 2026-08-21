@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Shield } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Shield, ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useBillingStatus, useStartCheckout, useStartTrial } from "@/hooks/use-billing";
@@ -33,6 +34,7 @@ const FEATURES: Record<"free" | "pro" | "premium_plus", string[]> = {
 };
 
 export default function PricingPage() {
+  const router = useRouter();
   const [interval, setInterval] = useState<Interval>("monthly");
   const { data: billing } = useBillingStatus();
   const { mutate: startCheckout, isPending, variables } = useStartCheckout();
@@ -62,7 +64,16 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/40">
-        <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center">
+        <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            onClick={() => router.back()}
+            aria-label="Go back"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
           <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
             <Shield className="w-5 h-5" />
             <span>PROTOCOL</span>

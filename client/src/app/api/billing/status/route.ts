@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
       isSuperUser: false,
       realPlan: "free" as const,
       previewPlan: null,
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
       activeTrial: null,
       eligibleTrials: [],
     });
@@ -40,7 +42,9 @@ export async function GET(request: NextRequest) {
     storage.getTrialHistory(user.id),
   ]);
 
-  const isActive = sub?.status === "active" && sub.plan !== "free";
+  const isCancelledGracePeriod =
+    sub?.status === "cancelled" && !!sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() > Date.now();
+  const isActive = (sub?.status === "active" || isCancelledGracePeriod) && sub?.plan !== "free";
   const realPlan = isActive ? sub!.plan : "free";
   const usedTrialTypes = new Set(trialHistory.map((t) => t.trialType));
 
@@ -63,6 +67,12 @@ export async function GET(request: NextRequest) {
     isSuperUser: user.isSuperUser,
     realPlan,
     previewPlan: sub?.previewPlan ?? null,
+    // When exactly this plan renews (still-active subscription) or, if
+    // `status` is "cancelled", when access actually ends and the user
+    // drops to Free — see the grace-period note on isCancelledGracePeriod
+    // above and cancelSubscriptionRecord in lib/billing.ts.
+    currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+    cancelAtPeriodEnd: isCancelledGracePeriod,
     activeTrial: activeTrial
       ? {
           trialType: activeTrial.trialType,

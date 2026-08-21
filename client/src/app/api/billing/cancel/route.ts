@@ -26,11 +26,13 @@ export async function POST(request: NextRequest) {
       emailToken: sub.paystackEmailToken,
     });
     // Paystack will also fire a subscription.disable webhook, but we
-    // update locally too so the UI reflects it immediately.
+    // update locally too so the UI reflects it immediately. Deliberately
+    // does NOT touch `plan` — see cancelSubscriptionRecord in lib/billing.ts
+    // for why: the user keeps access until currentPeriodEnd, and
+    // getEffectivePlan reverts them to Free automatically once that
+    // date passes.
     await storage.upsertSubscription({
       userId: user.id,
-      plan: "free",
-      billingInterval: null,
       status: "cancelled",
     });
     return NextResponse.json({ message: "Subscription cancelled" });

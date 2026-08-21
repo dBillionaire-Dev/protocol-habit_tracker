@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Shield, Lock, Activity, TrendingUp, User, Mail, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -101,8 +102,10 @@ export default function LandingPage() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-8">
-            <Shield className="w-8 h-8" data-app-logo-icon />
-            <span className="text-xl font-bold tracking-widest">PROTOCOL</span>
+            <Link href="/home" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
+              <Shield className="w-8 h-8" data-app-logo-icon />
+              <span className="text-xl font-bold tracking-widest">PROTOCOL</span>
+            </Link>
           </div>
 
           <h1 className="text-5xl lg:text-7xl font-bold tracking-tighter mb-6 leading-[1.1]">
@@ -235,7 +238,14 @@ export default function LandingPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    {!isSignUp && (
+                      <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                        Forgot password?
+                      </Link>
+                    )}
+                  </div>
                   <div className="relative">
                     <Input
                       id="password"
@@ -270,6 +280,15 @@ export default function LandingPage() {
                     "Sign In"
                   )}
                 </Button>
+
+                {isSignUp && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    By creating an account, you agree to our{" "}
+                    <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+                  </p>
+                )}
 
                 <p className="text-xs text-center text-muted-foreground">
                   {isSignUp ? (
@@ -324,7 +343,11 @@ export default function LandingPage() {
             </Button>
 
             <p className="text-xs text-center text-muted-foreground px-8">
-              By authenticating, you agree to accept full responsibility for your actions and inactions.
+              By authenticating, you agree to accept full responsibility for your actions and
+              inactions, and to our{" "}
+              <Link href="/terms" className="text-primary hover:underline">Terms</Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
             </p>
           </div>
         </div>

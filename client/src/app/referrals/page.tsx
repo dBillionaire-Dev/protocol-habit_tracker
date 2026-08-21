@@ -8,17 +8,37 @@ import { Button } from "@/components/ui/button";
 import { LayoutShell } from "@/components/layout-shell";
 import { useReferralStats } from "@/hooks/use-referrals";
 import { planDisplayName } from "@/lib/entitlements";
+import { toast } from "@/hooks/use-toast";
 
 export default function ReferralsPage() {
   const { data, isLoading, error } = useReferralStats();
   const [copied, setCopied] = useState(false);
   const isLocked = (error as (Error & { code?: string }) | null)?.code === "FEATURE_LOCKED";
 
+  // Spec section 12: "the referral share button should actually open
+  // sharing options... [fallback] copy the referral link to the
+  // clipboard, show a success toast/message." The button already used
+  // the real Web Share API with a clipboard fallback, so it was never
+  // decorative — but the fallback path gave NO visible feedback when
+  // clicked from the Share button specifically (only the separate Copy
+  // button's own icon flipped to a checkmark, which someone who clicked
+  // Share, not Copy, could easily miss entirely), and clipboard writes
+  // had no error handling at all. Both fixed below with an explicit toast
+  // and a try/catch.
   async function handleCopy() {
     if (!data) return;
-    await navigator.clipboard.writeText(data.referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(data.referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({ title: "✓ Referral link copied" });
+    } catch {
+      toast({
+        title: "Couldn't copy the link",
+        description: "Select and copy it manually from the box above.",
+        variant: "destructive",
+      });
+    }
   }
 
   async function handleShare() {
@@ -27,11 +47,22 @@ export default function ReferralsPage() {
       try {
         await navigator.share({
           title: "PROTOCOL",
-          text: "I've been using PROTOCOL to stay disciplined, join me:",
+          // The link is embedded in `text` too, not just passed via
+          // `url` — some share targets (many messaging apps' share
+          // intents in particular) only surface one of the two
+          // depending on their own implementation, so relying on `url`
+          // alone risks the recipient never seeing the link at all.
+          text: `I've been using PROTOCOL to stay disciplined, join me: ${data.referralLink}`,
           url: data.referralLink,
         });
-      } catch {
-        // user cancelled the share sheet — no-op
+      } catch (err) {
+        // AbortError means the user closed the native share sheet
+        // themselves — not an error worth surfacing. Anything else
+        // (e.g. a share target rejecting the payload) falls back to
+        // clipboard so the action still does SOMETHING rather than
+        // silently failing.
+        if (err instanceof Error && err.name === "AbortError") return;
+        handleCopy();
       }
     } else {
       handleCopy();

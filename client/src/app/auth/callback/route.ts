@@ -6,6 +6,13 @@ import { storage } from "@/lib/storage";
 // Exchanging it sets the session cookie via our server client, so the
 // rest of the app (Route Handlers, Server Components) just sees a logged
 // in user — no tokens ever touch the browser's JS.
+// Supabase redirects here after Google OAuth (with a `code` query param)
+// AND after a password-recovery email link (also a `code` param, when
+// `resetPasswordForEmail`'s `redirectTo` points here with
+// `?next=/reset-password` — see lib/auth-actions.ts). Exchanging it sets
+// the session cookie via our server client either way, so the reset-password
+// page can rely on there being an active (if temporary) session once it
+// loads. No tokens ever touch the browser's JS in either flow.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -26,7 +33,10 @@ export async function GET(request: NextRequest) {
         // commonly because the existing email/password account's email
         // was never confirmed — we'd otherwise silently end up with two
         // separate accounts for the same person. Treat that as a
-        // conflict instead of letting it through.
+        // conflict instead of letting it through. Only relevant to the
+        // OAuth path — a password-recovery `next` never hits this branch
+        // in practice, since recovery links are for existing accounts by
+        // definition.
         const existing = await storage.getUserByEmail(user.email.toLowerCase());
         if (existing && existing.id !== user.id && existing.provider !== "google") {
           await supabase.auth.signOut();
@@ -38,5 +48,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Failure path: route the error back to wherever the flow was headed,
+  // with wording that matches what actually failed, rather than always
+  // showing a generic "Google sign-in failed" on the main sign-in page —
+  // that was actively misleading for an expired PASSWORD RESET link.
+  if (next.startsWith("/reset-password")) {
+    return NextResponse.redirect(`${origin}/reset-password?error=invalid_or_expired_link`);
+  }
   return NextResponse.redirect(`${origin}/?error=auth_callback_failed`);
 }

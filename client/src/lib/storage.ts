@@ -38,6 +38,8 @@ export interface IStorage {
   getTrialHistory(userId: string): Promise<SubscriptionTrial[]>;
   getActiveTrial(userId: string): Promise<SubscriptionTrial | undefined>;
   startTrial(userId: string, trialType: TrialType, realPlan: PlanTier): Promise<SubscriptionTrial>;
+  getActiveTrialsForReminders(): Promise<(SubscriptionTrial & { userEmail: string | null })[]>;
+  markTrialReminderSent(trialId: number, key: "two_days" | "one_day" | "final"): Promise<void>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -208,6 +210,33 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // All trials currently active for ANY user (endsAt in the future),
+  // joined with the user's email — used exclusively by the trial
+  // reminder cron sweep (lib/trial-reminders.ts) to know who to email
+  // and where. Nothing else should need every active trial across all
+  // users at once.
+  async getActiveTrialsForReminders(): Promise<(SubscriptionTrial & { userEmail: string | null })[]> {
+    const rows = await db
+      .select({ trial: subscriptionTrials, userEmail: users.email })
+      .from(subscriptionTrials)
+      .innerJoin(users, eq(subscriptionTrials.userId, users.id))
+      .where(gte(subscriptionTrials.endsAt, new Date()));
+    return rows.map((r) => ({ ...r.trial, userEmail: r.userEmail }));
+  }
+
+  // Marks one reminder checkpoint (see TrialReminderKey) as sent for a
+  // trial, so the cron sweep never emails the same checkpoint twice.
+  async markTrialReminderSent(trialId: number, key: "two_days" | "one_day" | "final"): Promise<void> {
+    const now = new Date();
+    if (key === "two_days") {
+      await db.update(subscriptionTrials).set({ twoDayReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
+    } else if (key === "one_day") {
+      await db.update(subscriptionTrials).set({ oneDayReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
+    } else {
+      await db.update(subscriptionTrials).set({ finalReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
+    }
+  }
+
   async countActiveHabits(userId: string): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -224,7 +253,16 @@ export class DatabaseStorage implements IStorage {
       this.getSubscription(userId),
       this.getActiveTrial(userId),
     ]);
-    const isActive = sub?.status === "active" && sub.plan !== "free";
+    // A cancelled subscription still counts as active through the end of
+    // the period already paid for (see cancelSubscriptionRecord in
+    // lib/billing.ts) — this is what makes "keep access until period
+    // ends" true rather than the previous immediate-downgrade bug.
+    // After currentPeriodEnd passes, this naturally evaluates to false
+    // with no cron needed, same lazy-expiry pattern as trials/referral
+    // bonuses.
+    const inCancelledGracePeriod =
+      sub?.status === "cancelled" && !!sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() > Date.now();
+    const isActive = (sub?.status === "active" || inCancelledGracePeriod) && sub?.plan !== "free";
     const realPlan: PlanTier = isActive ? sub!.plan : "free";
     const referralBonusActive = !!(sub?.referralBonusExpiresAt && sub.referralBonusExpiresAt.getTime() > Date.now());
     return effectivePlan({

@@ -5,6 +5,8 @@ import { users } from "./models/auth";
 
 // Export auth tables
 export * from "./models/auth";
+// Export admin tables (audit log, support tickets, system events)
+export * from "./models/admin";
 
 // Habit Types
 // Free-plan habits can only be edited within this window after creation

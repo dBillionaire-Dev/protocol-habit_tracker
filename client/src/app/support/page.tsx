@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Mail, Phone, MessageCircle, Code2, Bug, Send, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Mail, Phone, MessageCircle, Code2, Bug, Send, Loader2, CheckCircle2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,8 @@ import { LayoutShell } from "@/components/layout-shell";
 import { useSendChatMessage } from "@/hooks/use-support-chat";
 import type { ChatMessage } from "@/lib/gemini-types";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
+import { apiFetch } from "@/lib/api";
 
 const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
 const SUPPORT_PHONE = process.env.NEXT_PUBLIC_SUPPORT_PHONE;
@@ -235,29 +238,60 @@ function DeveloperContactCard() {
 }
 
 function BugReportCard() {
+  const { user } = useAuth();
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Bug");
   const [steps, setSteps] = useState("");
   const [expected, setExpected] = useState("");
   const [actual, setActual] = useState("");
+  const [email, setEmail] = useState("");
 
-  function handleSubmit() {
-    const browserInfo = typeof navigator !== "undefined" ? navigator.userAgent : "unknown";
-    const body = [
-      `Category: ${category}`,
-      `Description: ${description}`,
-      `Steps to reproduce: ${steps}`,
-      `Expected behavior: ${expected}`,
-      `Actual behavior: ${actual}`,
-      `Browser/device: ${browserInfo}`,
-    ].join("\n\n");
+  const { mutate: submitTicket, isPending, isSuccess, error } = useMutation({
+    mutationFn: async () => {
+      const browserInfo = typeof navigator !== "undefined" ? navigator.userAgent : "unknown";
+      const message = [
+        `Description: ${description}`,
+        steps.trim() && `Steps to reproduce: ${steps}`,
+        expected.trim() && `Expected behavior: ${expected}`,
+        actual.trim() && `Actual behavior: ${actual}`,
+        `Browser/device: ${browserInfo}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
 
-    const mailto = `mailto:${DEVELOPER_EMAIL ?? ""}?subject=${encodeURIComponent(`[Bug Report] ${subject || "Untitled"}`)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailto;
+      const res = await apiFetch("/api/support/tickets", {
+        method: "POST",
+        body: JSON.stringify({ email: email || user?.email || "", category, subject, message }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message ?? "Failed to send report");
+      }
+      return res.json();
+    },
+  });
+
+  const canSubmit = subject.trim().length > 0 && description.trim().length > 0 && !isPending;
+
+  if (isSuccess) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bug className="w-4 h-4" />
+            Report a Bug
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            Thanks -- your report is in. We'll follow up by email if you left one.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
-
-  const canSubmit = subject.trim().length > 0 && description.trim().length > 0 && DEVELOPER_EMAIL;
 
   return (
     <Card>
@@ -267,7 +301,7 @@ function BugReportCard() {
           Report a Bug
         </CardTitle>
         <CardDescription>
-          Opens your email client with the details pre-filled, nothing is sent from here directly.
+          Sent straight to our team, no email client required.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -286,12 +320,25 @@ function BugReportCard() {
         <Textarea placeholder="Steps to reproduce" value={steps} onChange={(e) => setSteps(e.target.value)} rows={2} />
         <Textarea placeholder="Expected behavior" value={expected} onChange={(e) => setExpected(e.target.value)} rows={2} />
         <Textarea placeholder="Actual behavior" value={actual} onChange={(e) => setActual(e.target.value)} rows={2} />
-        <Button onClick={handleSubmit} disabled={!canSubmit}>
-          Send Report
-        </Button>
-        {!DEVELOPER_EMAIL && (
-          <p className="text-xs text-muted-foreground">Bug reporting isn't configured yet.</p>
+        {!user?.email && (
+          <Input
+            type="email"
+            placeholder="Your email (optional, so we can follow up)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
         )}
+        {error && <p className="text-xs text-destructive">{(error as Error).message}</p>}
+        <Button onClick={() => submitTicket()} disabled={!canSubmit}>
+          {isPending ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Sending...
+            </>
+          ) : (
+            "Send Report"
+          )}
+        </Button>
       </CardContent>
     </Card>
   );

@@ -121,15 +121,29 @@ export function useConfirmCleanDay() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
+      // clientHour: the browser's local hour-of-day, sent so the server
+      // can enforce the same 9PM-midnight confirmation window the UI
+      // already shows (see day-confirmation-card.tsx's
+      // useConfirmationWindow) — no timezone is stored per-account
+      // anywhere in this app, so the server has no other way to know
+      // the user's local evening. See api/habits/[id]/clean-day/route.ts
+      // for why trusting this value is a reasonable, non-security-boundary
+      // tradeoff. Guest mode has no server round-trip, so it isn't
+      // needed there.
+      const clientHour = new Date().getHours();
+
       if (isGuestMode()) {
         return guestStorage.confirmCleanDay(id, date);
       }
 
       const res = await apiFetch(getConfirmCleanDayUrl(id), {
         method: "POST",
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date, clientHour }),
       });
-      if (!res.ok) throw new Error("Failed to confirm clean day");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message || "Failed to confirm clean day", res.status, body.code);
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -166,7 +180,11 @@ export function useCompleteDaily() {
 
       const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
-        body: JSON.stringify({ date, completed, debtRepayment }),
+        // clientHour: see api/habits/[id]/complete/route.ts and the same
+        // comment in useConfirmCleanDay above — the server enforces the
+        // 9PM-midnight window using the browser's own local hour, since
+        // no per-user timezone is stored anywhere in this app.
+        body: JSON.stringify({ date, completed, debtRepayment, clientHour: new Date().getHours() }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -258,9 +276,12 @@ export function useMarkMissed() {
 
       const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
-        body: JSON.stringify({ date, completed: false }),
+        body: JSON.stringify({ date, completed: false, clientHour: new Date().getHours() }),
       });
-      if (!res.ok) throw new Error("Failed to mark as missed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(body.message || "Failed to mark as missed", res.status, body.code);
+      }
       return res.json();
     },
     onSuccess: () => {

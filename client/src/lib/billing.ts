@@ -57,7 +57,16 @@ export async function markSubscriptionPastDue(userId: string): Promise<void> {
 }
 
 export async function cancelSubscriptionRecord(userId: string): Promise<void> {
-  await storage.upsertSubscription({ userId, plan: "free", billingInterval: null, status: "cancelled" });
+  // Deliberately does NOT touch `plan` here. Paystack's "disable
+  // subscription" stops future renewal, but the current billing period
+  // has already been paid for — the user keeps their plan until
+  // currentPeriodEnd, then storage.getEffectivePlan's grace-period check
+  // naturally reverts them to Free once that date passes (no cron
+  // needed, same lazy-expiry pattern as trials/referral bonuses).
+  // Previously this set `plan: "free"` immediately, which silently
+  // contradicted the cancellation dialog's own copy promising access
+  // until the period ends.
+  await storage.upsertSubscription({ userId, status: "cancelled" });
 }
 
 export type { PaystackSubscriptionData };

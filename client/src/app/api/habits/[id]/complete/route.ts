@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { storage, DebtRepaymentError } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/require-user";
+import { hasFeature } from "@/lib/entitlements";
 import { z } from "zod";
 
+// clientHour: see api/habits/[id]/clean-day/route.ts for the full
+// rationale — no per-user timezone is stored anywhere in this app, so
+// the server trusts the browser's own local hour (already computed
+// client-side for the UI's own window display) rather than guessing from
+// server UTC and disagreeing with what the user sees on screen. Not a
+// security boundary: nothing sensitive is gated by this check.
 const input = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   completed: z.boolean(),
@@ -11,7 +18,12 @@ const input = z.object({
   // repay debt — this must be an explicit, separate choice (see
   // storage.completeDailyTask).
   debtRepayment: z.number().int().min(0).optional(),
+  clientHour: z.number().int().min(0).max(23),
 });
+
+function isWithinConfirmationWindow(clientHour: number): boolean {
+  return clientHour >= 21 && clientHour <= 23;
+}
 
 export async function POST(
   request: NextRequest,
@@ -28,8 +40,35 @@ export async function POST(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
+  let body: z.infer<typeof input>;
   try {
-    const body = input.parse(await request.json());
+    body = input.parse(await request.json());
+  } catch {
+    return NextResponse.json({ message: "Invalid request." }, { status: 400 });
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+  if (body.date > today) {
+    return NextResponse.json({ message: "Can't confirm a day that hasn't happened yet." }, { status: 400 });
+  }
+
+  // Same 9PM-midnight window as the Avoidance clean-day confirmation
+  // (spec section 9's Premium Flexible Day Confirmation), enforced here
+  // for consistency — this route previously had NO window check at all
+  // server-side, only a disabled button client-side, for either the
+  // "Execute Protocol" or "Missed" action, regardless of plan.
+  const plan = await storage.getEffectivePlan(user.id, user.isSuperUser);
+  if (!hasFeature(plan, "flexible_confirmation") && !isWithinConfirmationWindow(body.clientHour)) {
+    return NextResponse.json(
+      {
+        message: "This can only be confirmed between 9:00 PM and midnight. Premium Plus lets you confirm anytime.",
+        code: "OUTSIDE_CONFIRMATION_WINDOW",
+      },
+      { status: 403 },
+    );
+  }
+
+  try {
     const result = await storage.completeDailyTask(
       Number(id),
       body.date,

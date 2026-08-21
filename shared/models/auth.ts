@@ -9,6 +9,9 @@ import { pgTable, varchar, timestamp, boolean, serial, integer, text, unique, ty
 // upsert the first time a verified user hits the API (see
 // server/middleware/require-user.ts), so referential integrity is
 // enforced in application code rather than the database.
+export const USER_STATUSES = ["active", "suspended"] as const;
+export type UserStatus = typeof USER_STATUSES[number];
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey(), // matches auth.users.id (uuid as text)
   email: varchar("email").unique(),
@@ -17,6 +20,10 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   showOnboarding: varchar("show_onboarding").default("true"),
+  // Admin-controlled. Suspended users are blocked at resolveUser() --
+  // their session still exists with Supabase, but every API route treats
+  // them as unauthenticated. See lib/admin/storage.ts suspendUser/restoreUser.
+  status: varchar("status", { enum: USER_STATUSES }).notNull().default("active"),
   // Full access to every feature/tier regardless of billing status, for
   // internal testing. Set automatically on login based on the
   // SUPER_USER_EMAILS env var allow-list (see require-user.ts) — not

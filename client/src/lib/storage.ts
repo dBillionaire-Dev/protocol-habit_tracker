@@ -38,6 +38,8 @@ export interface IStorage {
   getTrialHistory(userId: string): Promise<SubscriptionTrial[]>;
   getActiveTrial(userId: string): Promise<SubscriptionTrial | undefined>;
   startTrial(userId: string, trialType: TrialType, realPlan: PlanTier): Promise<SubscriptionTrial>;
+  getActiveTrialsForReminders(): Promise<(SubscriptionTrial & { userEmail: string | null })[]>;
+  markTrialReminderSent(trialId: number, key: "two_days" | "one_day" | "final"): Promise<void>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -205,6 +207,33 @@ export class DatabaseStorage implements IStorage {
       // the DB's unique(userId, trialType) constraint is the actual
       // backstop, surfaced here as the same friendly message.
       throw new Error("You've already used this trial. Each trial is available once per account.");
+    }
+  }
+
+  // All trials currently active for ANY user (endsAt in the future),
+  // joined with the user's email — used exclusively by the trial
+  // reminder cron sweep (lib/trial-reminders.ts) to know who to email
+  // and where. Nothing else should need every active trial across all
+  // users at once.
+  async getActiveTrialsForReminders(): Promise<(SubscriptionTrial & { userEmail: string | null })[]> {
+    const rows = await db
+      .select({ trial: subscriptionTrials, userEmail: users.email })
+      .from(subscriptionTrials)
+      .innerJoin(users, eq(subscriptionTrials.userId, users.id))
+      .where(gte(subscriptionTrials.endsAt, new Date()));
+    return rows.map((r) => ({ ...r.trial, userEmail: r.userEmail }));
+  }
+
+  // Marks one reminder checkpoint (see TrialReminderKey) as sent for a
+  // trial, so the cron sweep never emails the same checkpoint twice.
+  async markTrialReminderSent(trialId: number, key: "two_days" | "one_day" | "final"): Promise<void> {
+    const now = new Date();
+    if (key === "two_days") {
+      await db.update(subscriptionTrials).set({ twoDayReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
+    } else if (key === "one_day") {
+      await db.update(subscriptionTrials).set({ oneDayReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
+    } else {
+      await db.update(subscriptionTrials).set({ finalReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
     }
   }
 

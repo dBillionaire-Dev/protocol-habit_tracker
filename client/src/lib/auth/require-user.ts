@@ -77,6 +77,13 @@ export async function resolveUser(
     isSuperUser: isSuperUserEmail(supaUser.email),
   });
 
+  // Suspended accounts keep a valid Supabase session but are treated as
+  // unauthenticated everywhere in the app -- this is the single place
+  // that enforces it, since every route resolves the user through here.
+  if (profile.status === "suspended") {
+    return null;
+  }
+
   return {
     id: profile.id,
     email: profile.email,

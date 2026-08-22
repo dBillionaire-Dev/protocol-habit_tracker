@@ -75,6 +75,32 @@ async function loginWithGoogle(): Promise<void> {
   });
 }
 
+// Spec section 14: sends the recovery email via Supabase Auth's own
+// password-reset flow (rather than rolling a custom token system) —
+// Supabase handles token generation, expiry, and the reset email itself.
+// redirectTo points at the SAME /auth/callback route already used for
+// Google OAuth (see app/auth/callback/route.ts), with `next` set so it
+// lands on /reset-password once the recovery code is exchanged for a
+// session, instead of the OAuth flow's default /dashboard.
+async function requestPasswordReset(email: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+  });
+  if (error) throw new Error(error.message);
+}
+
+// Used by BOTH the "set a new password" step of the forgot-password flow
+// (where the recovery-link exchange already established a temporary
+// session) and the signed-in "Change Password" action — Supabase's
+// updateUser doesn't distinguish between the two; either way it just
+// requires an active session, which both callers already have.
+async function updatePassword(newPassword: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(error.message);
+}
+
 async function checkExistingProvider(
   email: string,
 ): Promise<{ exists: boolean; provider: string | null }> {
@@ -204,6 +230,14 @@ export function useAuth() {
     mutationFn: loginWithGoogle,
   });
 
+  const requestPasswordResetMutation = useMutation({
+    mutationFn: requestPasswordReset,
+  });
+
+  const updatePasswordMutation = useMutation({
+    mutationFn: updatePassword,
+  });
+
   return {
     user: user
       ? {
@@ -231,5 +265,11 @@ export function useAuth() {
     isEmailSigningUp: emailSignupMutation.isPending,
     loginWithGoogle: googleLoginMutation.mutate,
     isGoogleLoggingIn: googleLoginMutation.isPending,
+    requestPasswordReset: requestPasswordResetMutation.mutate,
+    isRequestingPasswordReset: requestPasswordResetMutation.isPending,
+    requestPasswordResetError: requestPasswordResetMutation.error,
+    updatePassword: updatePasswordMutation.mutate,
+    isUpdatingPassword: updatePasswordMutation.isPending,
+    updatePasswordError: updatePasswordMutation.error,
   };
 }

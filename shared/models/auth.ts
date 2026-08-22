@@ -17,6 +17,14 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   showOnboarding: varchar("show_onboarding").default("true"),
+  // Account status (e.g. "active", possibly "suspended"/other values
+  // depending on how an admin dashboard elsewhere in this project
+  // manages it — that admin surface isn't part of this working copy, so
+  // this column is restored here verbatim from the live database schema
+  // (varchar, NOT NULL, default 'active') purely so drizzle-kit push
+  // stops proposing to drop it. Not read, written, or enforced anywhere
+  // in the code touched by any of these waves.
+  status: varchar("status").notNull().default("active"),
   // Full access to every feature/tier regardless of billing status, for
   // internal testing. Set automatically on login based on the
   // SUPER_USER_EMAILS env var allow-list (see require-user.ts) — not

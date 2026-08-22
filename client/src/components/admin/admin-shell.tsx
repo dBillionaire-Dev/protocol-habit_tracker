@@ -74,7 +74,7 @@ export function AdminShell({
           </Link>
         </div>
       </aside>
-      <main className="flex-1 p-6 lg:p-8 overflow-x-auto">{children}</main>
+      <main className="flex-1 p-6 pt-20 lg:p-8 overflow-x-auto">{children}</main>
     </div>
   );
 }

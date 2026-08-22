@@ -6,6 +6,9 @@ import {
   users, type User, type UpsertUser,
   subscriptions, type Subscription, type UpsertSubscription,
   subscriptionTrials, type SubscriptionTrial, type TrialType, TRIAL_CONFIG,
+  bugReports, type BugReport, type InsertBugReport,
+  pushSubscriptions, type PushSubscriptionRow, type InsertPushSubscription,
+  notificationPreferences, type NotificationPreferences, type NotificationCategory,
 } from "shared/schema";
 import { eq, and, desc, asc, sql, gte, lt, count } from "drizzle-orm";
 import { effectivePlan } from "./entitlements";
@@ -40,6 +43,17 @@ export interface IStorage {
   startTrial(userId: string, trialType: TrialType, realPlan: PlanTier): Promise<SubscriptionTrial>;
   getActiveTrialsForReminders(): Promise<(SubscriptionTrial & { userEmail: string | null })[]>;
   markTrialReminderSent(trialId: number, key: "two_days" | "one_day" | "final"): Promise<void>;
+  createBugReport(report: InsertBugReport): Promise<BugReport>;
+  savePushSubscription(sub: InsertPushSubscription): Promise<PushSubscriptionRow>;
+  deletePushSubscription(endpoint: string): Promise<void>;
+  getPushSubscriptionsForUser(userId: string): Promise<PushSubscriptionRow[]>;
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences>;
+  updateNotificationPreferences(
+    userId: string,
+    updates: Partial<Record<NotificationCategory, boolean>>,
+  ): Promise<NotificationPreferences>;
+  getUsersDueForConfirmationWindowPush(): Promise<{ userId: string; endpoint: string; p256dhKey: string; authKey: string }[]>;
+  markConfirmationWindowPushSent(userId: string): Promise<void>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -235,6 +249,114 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.update(subscriptionTrials).set({ finalReminderSentAt: now }).where(eq(subscriptionTrials.id, trialId));
     }
+  }
+
+  // Bug reports (spec section 11) — see the bugReports table comment in
+  // shared/schema.ts for why userId/userEmail are stored as plain
+  // snapshotted strings rather than a foreign key.
+  async createBugReport(report: InsertBugReport): Promise<BugReport> {
+    const [result] = await db.insert(bugReports).values(report).returning();
+    return result;
+  }
+
+  // --- Push notifications ---
+
+  async savePushSubscription(sub: InsertPushSubscription): Promise<PushSubscriptionRow> {
+    const [result] = await db
+      .insert(pushSubscriptions)
+      .values(sub)
+      .onConflictDoUpdate({
+        target: pushSubscriptions.endpoint,
+        // Re-subscribing the same browser can legitimately produce new
+        // keys (e.g. after clearing site data) even though the endpoint
+        // URL itself is unchanged — refresh them rather than silently
+        // keeping stale ones that would fail to encrypt correctly.
+        set: { p256dhKey: sub.p256dhKey, authKey: sub.authKey, userId: sub.userId },
+      })
+      .returning();
+    return result;
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+  }
+
+  async getPushSubscriptionsForUser(userId: string): Promise<PushSubscriptionRow[]> {
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+  }
+
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+    const [existing] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+    if (existing) return existing;
+
+    // Created lazily, on first read — every category defaults to true
+    // (see the notificationPreferences table comment in shared/schema.ts).
+    const [created] = await db
+      .insert(notificationPreferences)
+      .values({ userId })
+      .onConflictDoNothing()
+      .returning();
+    if (created) return created;
+
+    // Race: another request created the row between the select above and
+    // this insert. Re-read rather than error.
+    const [row] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+    return row;
+  }
+
+  async updateNotificationPreferences(
+    userId: string,
+    updates: Partial<Record<NotificationCategory, boolean>>,
+  ): Promise<NotificationPreferences> {
+    // Ensure a row exists first (lazy creation), then apply the partial
+    // update — mirrors getNotificationPreferences' own lazy-create path
+    // rather than assuming a settings row already exists for every user.
+    await this.getNotificationPreferences(userId);
+    const [updated] = await db
+      .update(notificationPreferences)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(notificationPreferences.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  // Every (userId, subscription) pair eligible for tonight's "your
+  // confirmation window is open" push: has at least one push
+  // subscription, has the confirmationWindowOpen preference on, and
+  // hasn't already been sent today (see lastConfirmationWindowPushDate).
+  // Used exclusively by the confirmation-window-push cron sweep.
+  async getUsersDueForConfirmationWindowPush(): Promise<{ userId: string; endpoint: string; p256dhKey: string; authKey: string }[]> {
+    const today = new Date().toISOString().split("T")[0];
+    const rows = await db
+      .select({
+        userId: pushSubscriptions.userId,
+        endpoint: pushSubscriptions.endpoint,
+        p256dhKey: pushSubscriptions.p256dhKey,
+        authKey: pushSubscriptions.authKey,
+        confirmationWindowOpen: notificationPreferences.confirmationWindowOpen,
+        lastPushDate: notificationPreferences.lastConfirmationWindowPushDate,
+      })
+      .from(pushSubscriptions)
+      .innerJoin(notificationPreferences, eq(notificationPreferences.userId, pushSubscriptions.userId))
+      .where(eq(notificationPreferences.confirmationWindowOpen, true));
+
+    return rows
+      .filter((r) => r.lastPushDate !== today)
+      .map((r) => ({ userId: r.userId, endpoint: r.endpoint, p256dhKey: r.p256dhKey, authKey: r.authKey }));
+  }
+
+  async markConfirmationWindowPushSent(userId: string): Promise<void> {
+    const today = new Date().toISOString().split("T")[0];
+    await db
+      .update(notificationPreferences)
+      .set({ lastConfirmationWindowPushDate: today, updatedAt: new Date() })
+      .where(eq(notificationPreferences.userId, userId));
   }
 
   async countActiveHabits(userId: string): Promise<number> {

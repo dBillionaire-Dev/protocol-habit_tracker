@@ -61,22 +61,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  useEffect(() => {
-  // Service worker causes reload loops in dev due to stale chunk caching
-  if (process.env.NODE_ENV === "development") return;
-
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker
-      .register("/sw.js")
-      .then((registration) => {
-        console.log("Service Worker registered:", registration.scope);
-      })
-      .catch((error) => {
-        console.error("Service Worker registration failed:", error);
-      });
-  }
-}, []);
-
   // Handle API calls differently
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(
@@ -209,6 +193,63 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") {
     self.skipWaiting();
   }
+});
+
+// --- Web Push (spec sections 13 & 15) ---
+//
+// A 'push' event fires when the browser's push service delivers a
+// message from our server (see lib/push.ts), REGARDLESS of whether the
+// app/tab is open — that's the whole point of push vs. an in-app toast.
+// Payload is plain JSON we control server-side (see lib/push.ts's
+// sendPushToUser): { title, body, url, tag }.
+//
+// `tag` is used deliberately so a repeat notification of the same kind
+// (e.g. confirmation-window-open) replaces rather than stacks on top of
+// an earlier one still showing — see the spec's "do not send duplicate
+// notifications" requirement. The actual dedup that stops the SERVER
+// from sending a second one in the first place lives in
+// lib/notifications.ts; this `tag` is a second, client-side layer of
+// the same guarantee.
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "Protocol", body: event.data.text() };
+  }
+
+  const options = {
+    body: payload.body,
+    icon: "/android-chrome-192x192.png",
+    badge: "/android-chrome-192x192.png",
+    tag: payload.tag || "protocol-notification",
+    data: { url: payload.url || "/dashboard" },
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title || "Protocol", options));
+});
+
+// Clicking a notification focuses an already-open Protocol tab if one
+// exists, rather than always opening a new one.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/dashboard";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && "focus" in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
 });
 
 console.log("Service Worker loaded");

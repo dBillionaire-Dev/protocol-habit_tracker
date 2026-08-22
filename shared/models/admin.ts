@@ -1,6 +1,5 @@
 import { pgTable, varchar, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { users } from "./auth";
-
 // --- Admin audit log ---
 // One row per admin action that changes something. Deliberately denormalizes
 // the admin's email onto the row so the log still reads correctly even if
@@ -15,9 +14,7 @@ export const adminAuditLog = pgTable("admin_audit_log", {
   details: text("details"), // short human-readable free text, not structured JSON
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-
 export type AdminAuditLogEntry = typeof adminAuditLog.$inferSelect;
-
 // --- Support tickets ---
 // Deliberately a single flat table, not a full threaded conversation --
 // one submission, one admin reply, one status. Matches the current
@@ -25,7 +22,6 @@ export type AdminAuditLogEntry = typeof adminAuditLog.$inferSelect;
 // need back-and-forth threading yet. Revisit if that changes.
 export const TICKET_STATUSES = ["open", "pending", "resolved"] as const;
 export type TicketStatus = typeof TICKET_STATUSES[number];
-
 export const supportTickets = pgTable("support_tickets", {
   id: serial("id").primaryKey(),
   // Nullable: guest-mode submitters have no real account row. `email`
@@ -42,10 +38,8 @@ export const supportTickets = pgTable("support_tickets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
-
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertSupportTicket = typeof supportTickets.$inferInsert;
-
 // --- System event log ---
 // Intentionally minimal: a handful of high-value spots (billing webhook
 // failures first) log here via lib/system-log.ts's logSystemEvent(). Not
@@ -53,7 +47,6 @@ export type InsertSupportTicket = typeof supportTickets.$inferInsert;
 // right next step once this app has traffic that justifies one.
 export const EVENT_LEVELS = ["error", "warning"] as const;
 export type EventLevel = typeof EVENT_LEVELS[number];
-
 export const systemEvents = pgTable("system_events", {
   id: serial("id").primaryKey(),
   source: varchar("source").notNull(), // e.g. "billing_webhook", "ai", "support_chat"
@@ -61,5 +54,4 @@ export const systemEvents = pgTable("system_events", {
   message: text("message").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
-
 export type SystemEvent = typeof systemEvents.$inferSelect;

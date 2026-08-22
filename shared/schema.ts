@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, date, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, date, unique, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { users } from "./models/auth";
@@ -239,3 +239,111 @@ export function countScheduledDaysBetween(
   }
   return count;
 }
+
+// --- Bug reports (spec section 11) ---
+//
+// Persisted here (not just emailed) so reports remain visible even if an
+// email bounces or gets buried, and so a future admin dashboard can list
+// and triage them without needing an inbox — the spec explicitly asks
+// for this "if the existing architecture supports it," and since this
+// app already has Postgres via Drizzle for everything else, it does.
+//
+// userId/userEmail are nullable and NOT foreign-keyed to `users`:
+// reports should be submittable by guests (no account, no user row to
+// reference) and should survive account deletion (storage.deleteUserAccount
+// permanently removes the user row; a bug report about that very account
+// dying shouldn't disappear along with it). Snapshotting the email as
+// plain text at submission time is deliberate for the same reason.
+export const bugReports = pgTable("bug_reports", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
+  userEmail: varchar("user_email"),
+  subject: text("subject").notNull(),
+  category: varchar("category").notNull(),
+  description: text("description").notNull(),
+  stepsToReproduce: text("steps_to_reproduce"),
+  expectedBehavior: text("expected_behavior"),
+  actualBehavior: text("actual_behavior"),
+  // Which app route the report was filed from (e.g. "/dashboard") — NOT
+  // a full URL, so no query params or fragments that could carry
+  // sensitive data ever get persisted or emailed.
+  page: varchar("page"),
+  // navigator.userAgent — never anything from cookies, headers, or auth
+  // state. No passwords, tokens, or session identifiers are collected
+  // anywhere in this table, matching the spec's explicit requirement.
+  userAgent: text("user_agent"),
+  appVersion: varchar("app_version"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertBugReportSchema = createInsertSchema(bugReports).omit({
+  id: true,
+  createdAt: true,
+});
+export type BugReport = typeof bugReports.$inferSelect;
+export type InsertBugReport = typeof bugReports.$inferInsert;
+
+// --- Push notifications (spec sections 13 & 15) ---
+//
+// One row per subscribed BROWSER/DEVICE, not per user — the same
+// account can have Protocol open (and separately subscribed) on a phone
+// and a laptop, and each needs its own endpoint/keys to receive pushes.
+// `endpoint` (the browser push service's unique URL for that
+// registration) is the natural unique key: re-subscribing the same
+// browser produces the same endpoint, so upserting on conflict avoids
+// silently accumulating duplicate rows for one device across repeated
+// permission grants.
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dhKey: text("p256dh_key").notNull(),
+  authKey: text("auth_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+// One row per user, created lazily on first preference read/write
+// (see storage.getNotificationPreferences). Every category defaults to
+// true so opting IN to push (granting browser permission) gets you all
+// the useful nudges by default; opting individual categories back OFF
+// is the "manage notification preferences" the spec asks for.
+//
+// NOTE ON SCOPE: every column below has a real preference toggle wired
+// up in the UI. Only `confirmationWindowOpen` has an actual SERVER-SIDE
+// trigger sending real pushes for it right now (see
+// api/cron/confirmation-window-push/route.ts) — habit reminders, streak
+// reminders, and subscription reminders don't have their trigger logic
+// built yet. Flagging this honestly rather than implying they're all
+// fully wired just because the toggle exists.
+export const notificationPreferences = pgTable("notification_preferences", {
+  userId: varchar("user_id").primaryKey().references(() => users.id),
+  habitReminders: boolean("habit_reminders").notNull().default(true),
+  confirmationWindowOpen: boolean("confirmation_window_open").notNull().default(true),
+  confirmationWindowReminder: boolean("confirmation_window_reminder").notNull().default(true),
+  trialEnding: boolean("trial_ending").notNull().default(true),
+  subscriptionReminders: boolean("subscription_reminders").notNull().default(true),
+  streakReminders: boolean("streak_reminders").notNull().default(true),
+  importantAnnouncements: boolean("important_announcements").notNull().default(true),
+  // Dedup guard for the daily confirmation-window-open cron sweep — only
+  // ever send once per calendar day per user, even if the cron somehow
+  // fires more than once (matches the spec's explicit "do not send
+  // duplicate notifications" requirement, enforced server-side rather
+  // than trusting the sw.js `tag` collapsing alone).
+  lastConfirmationWindowPushDate: date("last_confirmation_window_push_date"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+export type UpsertNotificationPreferences = typeof notificationPreferences.$inferInsert;
+
+export const NOTIFICATION_CATEGORIES = [
+  "habitReminders",
+  "confirmationWindowOpen",
+  "confirmationWindowReminder",
+  "trialEnding",
+  "subscriptionReminders",
+  "streakReminders",
+  "importantAnnouncements",
+] as const;
+export type NotificationCategory = typeof NOTIFICATION_CATEGORIES[number];

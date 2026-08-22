@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles,
   FlaskConical, HelpCircle, Menu, LayoutDashboard, BarChart3, History as HistoryIcon,
-  Sparkle, Users, KeyRound,
+  Sparkle, Users, KeyRound, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,6 +41,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { useBillingStatus, useSetPreviewPlan } from "@/hooks/use-billing";
 import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
 import { ManageSubscriptionDialog } from "@/components/manage-subscription-dialog";
+import { NotificationSettingsDialog } from "@/components/notification-settings-dialog";
+import { EnableNotificationsBanner } from "@/components/enable-notifications-banner";
+import { useConfirmationWindowForegroundNotify } from "@/hooks/use-confirmation-window-notify";
+import { useNotificationPermission } from "@/hooks/use-push-notifications";
 import {
   Dialog,
   DialogContent,
@@ -90,12 +94,17 @@ export function LayoutShell({ children }: LayoutShellProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const pathname = usePathname();
 
   const isGuest = user?.provider === "guest";
   const plan = billing?.plan ?? "free";
   const isPaid = isPaidPlan(plan);
   const isSuperUser = billing?.isSuperUser ?? false;
+
+  // Singleton — see the hook's own comment for why this must be called
+  // exactly once, here, rather than inside HabitCard/DayConfirmationCard.
+  useConfirmationWindowForegroundNotify();
   const isPreviewing = isSuperUser && !!billing?.previewPlan;
 
   // Attempts to attribute a pending ?ref= code (captured on the landing
@@ -134,8 +143,8 @@ export function LayoutShell({ children }: LayoutShellProps) {
       {/* Header */}
       <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/home" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
-            <Shield className="w-5 h-5" data-app-logo-icon />
+          <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
+            <Shield className="w-5 h-5" />
             <span>PROTOCOL</span>
           </Link>
 
@@ -252,6 +261,16 @@ export function LayoutShell({ children }: LayoutShellProps) {
                     >
                       <Crown className="w-4 h-4" />
                       Manage Subscription
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMobileNavOpen(false);
+                        setNotificationsOpen(true);
+                      }}
+                      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-left"
+                    >
+                      <Bell className="w-4 h-4" />
+                      Notifications
                     </button>
                     <Link
                       href="/support"
@@ -394,6 +413,19 @@ export function LayoutShell({ children }: LayoutShellProps) {
                   Change Password
                 </DropdownMenuItem>
               )}
+              {!isGuest && (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setMenuOpen(false);
+                    setNotificationsOpen(true);
+                  }}
+                  data-testid="menu-item-notifications"
+                >
+                  <Bell className="w-4 h-4 mr-2" />
+                  Notifications
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => logout()} data-testid="menu-item-sign-out">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
@@ -419,6 +451,8 @@ export function LayoutShell({ children }: LayoutShellProps) {
           <ManageSubscriptionDialog open={manageSubOpen} onOpenChange={setManageSubOpen} />
 
           <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
+
+          <NotificationSettingsDialog open={notificationsOpen} onOpenChange={setNotificationsOpen} />
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
@@ -474,6 +508,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
 
       {/* Main Content */}
       <main className="flex-1 container max-w-5xl mx-auto px-4 py-8">
+        <EnableNotificationsBanner onOpenSettings={() => setNotificationsOpen(true)} />
         {children}
       </main>
 

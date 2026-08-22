@@ -35,12 +35,6 @@ const RESOLVE_TAIL = 700;
 const shieldPath =
   "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z";
 
-// Colors use the app's theme tokens (bg-background / fill-foreground /
-// fill-background) rather than hardcoded white/black, so this respects
-// dark mode automatically -- shield = foreground, text/backdrop =
-// background, which keeps the contrast relationship correct in both
-// themes without any explicit dark: variant needed.
-
 // Geometry measured directly from rendering the real glyphs at these
 // exact font settings so the "P" -> "Protocol" split lines up
 // pixel-accurately instead of guessing at kerning.
@@ -87,13 +81,6 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
   const iconBoxRef = useRef<HTMLDivElement>(null);
   const appReadyRef = useRef(appReady);
   const resolvedRef = useRef(false);
-  // Captured once, at the moment of first measurement -- before any
-  // transform has been applied to the icon. Reused by the resize/
-  // orientation handler below so recomputed deltas stay relative to the
-  // icon's true natural position rather than its current (already
-  // mid-animation, transformed) rendered position, which would double
-  // up the transform and cause a jump.
-  const naturalIconRef = useRef<{ cx: number; cy: number; width: number } | null>(null);
 
   const [lettersFormed, setLettersFormed] = useState(false);
   const [waitingForReady, setWaitingForReady] = useState(false);
@@ -109,99 +96,29 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
   // the scheduled attempt and the appReady-just-turned-true watcher call
   // this same function via the ref, so there's exactly one place that
   // measures the target and kicks off the morph.
-  //
-  // Retries a few times before giving up: if the header/logo hasn't
-  // finished mounting at the exact instant this fires, a single lookup
-  // could miss it and silently fall back to a plain fade instead of the
-  // shrink/slide morph. This polls briefly rather than assuming the
-  // first attempt is definitive.
   beginResolveRef.current = () => {
     if (resolvedRef.current) return;
     resolvedRef.current = true;
     setWaitingForReady(false);
 
-    const MAX_ATTEMPTS = 6;
-    const RETRY_DELAY = 80;
-
-    const finish = (target: HTMLElement | null) => {
-      const iconBox = iconBoxRef.current;
-      if (target && iconBox) {
-        const targetRect = target.getBoundingClientRect();
-        // This runs before any transform has been applied to the icon
-        // (the animate prop update happens after this synchronous
-        // block), so this rect is the icon's true natural position --
-        // safe to save for later reuse by the resize handler.
-        const iconRect = iconBox.getBoundingClientRect();
-        const targetCx = targetRect.left + targetRect.width / 2;
-        const targetCy = targetRect.top + targetRect.height / 2;
-        const iconCx = iconRect.left + iconRect.width / 2;
-        const iconCy = iconRect.top + iconRect.height / 2;
-        naturalIconRef.current = { cx: iconCx, cy: iconCy, width: iconRect.width };
-        setMorphTarget({
-          dx: targetCx - iconCx,
-          dy: targetCy - iconCy,
-          scale: targetRect.width / iconRect.width,
-        });
-      } else {
-        // Always surface this -- not just in dev -- since a silent
-        // fallback here (plain fade instead of morphing onto the logo)
-        // is exactly the kind of thing that goes unnoticed until someone
-        // happens to watch the animation closely. Loud in the console is
-        // cheap insurance against a repeat of that.
-        // eslint-disable-next-line no-console
-        console.error(
-          '[ProtocolSplash] Could not find [data-app-logo-icon] in the DOM -- ' +
-          "falling back to a plain fade instead of morphing onto the logo. " +
-          "Make sure the header/landing logo element has the data-app-logo-icon attribute.",
-        );
-      }
-      setRevealed(true);
-      window.setTimeout(onComplete, RESOLVE_TAIL);
-    };
-
-    const attempt = (n: number) => {
-      const target = document.querySelector<HTMLElement>("[data-app-logo-icon]");
-      if (target || n >= MAX_ATTEMPTS) {
-        finish(target);
-      } else {
-        window.setTimeout(() => attempt(n + 1), RETRY_DELAY);
-      }
-    };
-    attempt(0);
-  };
-
-  // If the viewport changes (resize or orientation change) while the
-  // morph is in flight -- e.g. a phone rotated mid-animation -- re-measure
-  // the target and retarget the animation rather than letting it land on
-  // a now-stale position. Framer Motion smoothly retargets an in-progress
-  // animation when the `animate` values change, using its current
-  // rendered position as the new starting point, so this doesn't cause a
-  // visible jump -- as long as the delta stays relative to the icon's
-  // saved *natural* position rather than its current transformed one.
-  useEffect(() => {
-    if (!(revealed && morphTarget !== null)) return;
-
-    const remeasure = () => {
-      const target = document.querySelector<HTMLElement>("[data-app-logo-icon]");
-      const natural = naturalIconRef.current;
-      if (!target || !natural) return;
+    const target = document.querySelector<HTMLElement>("[data-app-logo-icon]");
+    const iconBox = iconBoxRef.current;
+    if (target && iconBox) {
       const targetRect = target.getBoundingClientRect();
+      const iconRect = iconBox.getBoundingClientRect();
       const targetCx = targetRect.left + targetRect.width / 2;
       const targetCy = targetRect.top + targetRect.height / 2;
+      const iconCx = iconRect.left + iconRect.width / 2;
+      const iconCy = iconRect.top + iconRect.height / 2;
       setMorphTarget({
-        dx: targetCx - natural.cx,
-        dy: targetCy - natural.cy,
-        scale: targetRect.width / natural.width,
+        dx: targetCx - iconCx,
+        dy: targetCy - iconCy,
+        scale: targetRect.width / iconRect.width,
       });
-    };
-
-    window.addEventListener("resize", remeasure);
-    window.addEventListener("orientationchange", remeasure);
-    return () => {
-      window.removeEventListener("resize", remeasure);
-      window.removeEventListener("orientationchange", remeasure);
-    };
-  }, [revealed, morphTarget]);
+    }
+    setRevealed(true);
+    window.setTimeout(onComplete, RESOLVE_TAIL);
+  };
 
   // Mount-once timers: letters phase, and the resolve attempt/fallback.
   useEffect(() => {
@@ -256,7 +173,7 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
       <span className="sr-only">Loading Protocol</span>
 
       <motion.div
-        className="absolute inset-0 bg-background"
+        className="absolute inset-0 bg-white"
         initial={{ opacity: 1 }}
         animate={{ opacity: revealed ? 0 : 1 }}
         transition={{ duration: shouldReduceMotion ? 0.15 : 0.55, ease: [0.4, 0, 0.2, 1] }}
@@ -280,21 +197,21 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
         {!shouldReduceMotion && !revealed && (
           <>
             <motion.div
-              className="absolute rounded-full border border-foreground/10"
+              className="absolute rounded-full border border-black/10"
               style={{ width: "min(94vw, 470px)", height: "min(94vw, 470px)" }}
               initial={{ opacity: 0, scale: 0.6 }}
               animate={{ opacity: [0, 0.3, 0], scale: [0.6, 1.15, 1.3] }}
               transition={{ delay: 0.9, duration: 1.1, ease: "easeOut" }}
             />
             <motion.div
-              className="absolute rounded-full border border-foreground/[0.08]"
+              className="absolute rounded-full border border-black/[0.08]"
               style={{ width: "min(78vw, 390px)", height: "min(78vw, 390px)" }}
               initial={{ opacity: 0, scale: 0.55 }}
               animate={{ opacity: [0, 0.4, 0], scale: [0.55, 1.05, 1.2] }}
               transition={{ delay: 0.35, duration: 0.95, ease: "easeOut" }}
             />
             <motion.div
-              className="absolute rounded-full bg-foreground/[0.03] blur-2xl"
+              className="absolute rounded-full bg-black/[0.03] blur-2xl"
               style={{ width: "min(60vw, 300px)", height: "min(60vw, 300px)" }}
               initial={{ opacity: 0 }}
               animate={{ opacity: [0, 1, 0.6] }}
@@ -325,7 +242,7 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
           }
         >
           <svg viewBox="0 0 24 24" className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
-            <path d={shieldPath} className="fill-foreground" />
+            <path d={shieldPath} fill="#000000" />
 
             <motion.text
               x={P_FINAL_X}
@@ -334,7 +251,7 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
               fontFamily="Arial, Helvetica, sans-serif"
               fontWeight={700}
               fontSize={P_FINAL_SIZE}
-              className="fill-background"
+              fill="#ffffff"
               style={{ transformOrigin: `${P_CENTER.x}px ${P_CENTER.y}px` }}
               initial={
                 shouldReduceMotion
@@ -364,7 +281,7 @@ export function ProtocolSplash({ onComplete, appReady = true }: ProtocolSplashPr
               fontFamily="Arial, Helvetica, sans-serif"
               fontWeight={700}
               fontSize={WORD_SIZE}
-              className="fill-background"
+              fill="#ffffff"
               initial={shouldReduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: 1.4 }}
               animate={
                 shouldReduceMotion

@@ -135,7 +135,7 @@ export function LayoutShell({ children }: LayoutShellProps) {
       <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/home" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
-            <Shield className="w-5 h-5" />
+            <Shield className="w-5 h-5" data-app-logo-icon />
             <span>PROTOCOL</span>
           </Link>
 

@@ -199,7 +199,16 @@ export function HabitCard({ habit }: HabitCardProps) {
     if (remainingDebt <= 0) {
       // No outstanding debt — nothing to ask about, complete immediately
       // exactly like before this feature existed.
-      completeMutation.mutate({ id: habit.id, date: today, completed: true });
+      completeMutation.mutate(
+        { id: habit.id, date: today, completed: true },
+        {
+          onSuccess: (data) => {
+            if ("queuedOffline" in data) {
+              toast({ title: "Saved offline", description: "This will sync automatically once you're back online." });
+            }
+          },
+        },
+      );
       return;
     }
     setRepayDuringComplete("no");
@@ -215,6 +224,19 @@ export function HabitCard({ habit }: HabitCardProps) {
       {
         onSuccess: (data) => {
           setCompleteDialogOpen(false);
+          if ("queuedOffline" in data) {
+            // Queued locally, not confirmed by the server yet — do NOT
+            // read data.debtSummary here, it doesn't exist on this
+            // shape. See QueuedLocally in use-habits.ts.
+            toast({
+              title: "Saved offline",
+              description:
+                debtRepayment > 0
+                  ? "This completion and debt repayment will sync automatically once you're back online."
+                  : "This will sync automatically once you're back online.",
+            });
+            return;
+          }
           if (debtRepayment > 0) {
             const remaining = data.debtSummary.remainingDebt;
             toast({
@@ -315,7 +337,14 @@ export function HabitCard({ habit }: HabitCardProps) {
                     setConfirmCleanError(null);
                     confirmCleanMutation.mutate(
                       { id: habit.id, date: today },
-                      { onError: (err) => setConfirmCleanError(err instanceof ApiError ? err.message : "Something went wrong.") },
+                      {
+                        onSuccess: (data) => {
+                          if ("queuedOffline" in data) {
+                            toast({ title: "Saved offline", description: "This will sync automatically once you're back online." });
+                          }
+                        },
+                        onError: (err) => setConfirmCleanError(err instanceof ApiError ? err.message : "Something went wrong."),
+                      },
                     );
                   }}
                   disabled={!canConfirmCleanDay || confirmCleanMutation.isPending || !isClean}
@@ -475,7 +504,14 @@ export function HabitCard({ habit }: HabitCardProps) {
                     setMissedError(null);
                     missedMutation.mutate(
                       { id: habit.id, date: today },
-                      { onError: (err) => setMissedError(err instanceof ApiError ? err.message : "Something went wrong.") },
+                      {
+                        onSuccess: (data) => {
+                          if ("queuedOffline" in data) {
+                            toast({ title: "Saved offline", description: "This will sync automatically once you're back online." });
+                          }
+                        },
+                        onError: (err) => setMissedError(err instanceof ApiError ? err.message : "Something went wrong."),
+                      },
                     );
                   }}
                   disabled={missedMutation.isPending}

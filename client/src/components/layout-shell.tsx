@@ -43,6 +43,7 @@ import { planDisplayName, isPaidPlan } from "@/lib/entitlements";
 import { ManageSubscriptionDialog } from "@/components/manage-subscription-dialog";
 import { NotificationSettingsDialog } from "@/components/notification-settings-dialog";
 import { EnableNotificationsBanner } from "@/components/enable-notifications-banner";
+import { OfflineIndicator } from "@/components/offline-indicator";
 import { useConfirmationWindowForegroundNotify } from "@/hooks/use-confirmation-window-notify";
 import { useNotificationPermission } from "@/hooks/use-push-notifications";
 import {
@@ -505,6 +506,8 @@ export function LayoutShell({ children }: LayoutShellProps) {
           Previewing as {planDisplayName(billing?.previewPlan ?? "free")} — this is not your real plan
         </div>
       )}
+
+      <OfflineIndicator />
 
       {/* Main Content */}
       <main className="flex-1 container max-w-5xl mx-auto px-4 py-8">

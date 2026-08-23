@@ -4,6 +4,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type InsertHabit, type UpdateHabitRequest, type HabitWithStatus } from "shared/schema";
 import { apiFetch, isGuestMode } from "@/lib/api";
 import { guestStorage, GuestLimitError, GuestDebtRepaymentError, GuestHabitEditError } from "@/lib/guest-storage";
+import { enqueue as enqueueOfflineAction } from "@/lib/offline-queue";
+
+// Marks a mutation's return value as having been queued locally rather
+// than confirmed by the server — spec section 16's explicit "do not
+// falsely claim that an action has been permanently saved to the server
+// while offline." Callers (habit-card.tsx) check this flag to show a
+// "saved offline, will sync" state instead of treating it identically
+// to a real server confirmation.
+export interface QueuedLocally {
+  queuedOffline: true;
+}
 
 function getRepayDebtUrl(id: number): string { return `/api/habits/${id}/repay-debt`; }
 
@@ -136,6 +147,16 @@ export function useConfirmCleanDay() {
         return guestStorage.confirmCleanDay(id, date);
       }
 
+      // Offline: queue rather than let this fail outright — see
+      // lib/offline-queue.ts for why confirm-clean-day specifically is
+      // safe to queue (storage.confirmCleanDay already guards against
+      // replaying the same date twice). Returns a value the caller can
+      // distinguish from a real server confirmation (see QueuedLocally).
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        enqueueOfflineAction({ type: "confirm-clean-day", habitId: id, date });
+        return { queuedOffline: true } as QueuedLocally;
+      }
+
       const res = await apiFetch(getConfirmCleanDayUrl(id), {
         method: "POST",
         body: JSON.stringify({ date, clientHour }),
@@ -176,6 +197,24 @@ export function useCompleteDaily() {
           }
           throw err;
         }
+      }
+
+      // Offline: queue rather than fail outright. Safe to queue —
+      // storage.completeDailyTask UPSERTs on (habitId, date), so
+      // replaying it is idempotent even if the same day somehow also
+      // got confirmed another way before this synced. A queued debt
+      // repayment amount CAN legitimately be rejected on sync if the
+      // remaining debt has since changed (e.g. from another synced
+      // action) — that surfaces as a normal "failed, tap to retry" item
+      // via useOfflineSync's drain(), not a silent bug.
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        enqueueOfflineAction({
+          type: "complete-daily",
+          habitId: id,
+          date,
+          debtRepayment,
+        });
+        return { queuedOffline: true } as QueuedLocally;
       }
 
       const res = await apiFetch(getCompleteDailyUrl(id), {
@@ -272,6 +311,13 @@ export function useMarkMissed() {
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
       if (isGuestMode()) {
         return guestStorage.completeDailyTask(id, date, false);
+      }
+
+      // Offline: see the identical comment in useCompleteDaily above —
+      // same underlying route/idempotency guarantee.
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        enqueueOfflineAction({ type: "mark-missed", habitId: id, date });
+        return { queuedOffline: true } as QueuedLocally;
       }
 
       const res = await apiFetch(getCompleteDailyUrl(id), {

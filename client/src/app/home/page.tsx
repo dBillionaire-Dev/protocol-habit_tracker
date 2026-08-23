@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 // (no client-side data fetching): it never needs the visitor's billing
 // status or habit data, only static copy and links into the real app.
 export const metadata: Metadata = {
-  title: "Protocol — A Serious System for Personal Discipline",
+  title: "Protocol - A Serious System for Personal Discipline",
   description:
     "Build habits that compound and eliminate habits that don't belong. Protocol tracks streaks, habit debt, and progress with zero tolerance for excuses.",
 };
@@ -54,7 +54,7 @@ export default function HomePage() {
       <header className="border-b border-border/40">
         <div className="container max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tighter">
-            <Shield className="w-5 h-5" />
+            <Shield className="w-5 h-5" data-app-logo-icon />
             <span>PROTOCOL</span>
           </Link>
           <div className="flex items-center gap-2">

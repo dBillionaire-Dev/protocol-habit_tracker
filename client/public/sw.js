@@ -3,9 +3,9 @@
  * Handles offline-first caching and background sync
  */
 
-const CACHE_NAME = "protocol-v1";
-const RUNTIME_CACHE = "habit-tracker-runtime";
-const API_CACHE = "habit-tracker-api";
+const CACHE_NAME = "protocol-v2";
+const RUNTIME_CACHE = "habit-tracker-runtime-v2";
+const API_CACHE = "habit-tracker-api-v2";
 
 // Files to cache on install
 const urlsToCache = [
@@ -195,21 +195,6 @@ self.addEventListener("message", (event) => {
   }
 });
 
-// --- Web Push (spec sections 13 & 15) ---
-//
-// A 'push' event fires when the browser's push service delivers a
-// message from our server (see lib/push.ts), REGARDLESS of whether the
-// app/tab is open — that's the whole point of push vs. an in-app toast.
-// Payload is plain JSON we control server-side (see lib/push.ts's
-// sendPushToUser): { title, body, url, tag }.
-//
-// `tag` is used deliberately so a repeat notification of the same kind
-// (e.g. confirmation-window-open) replaces rather than stacks on top of
-// an earlier one still showing — see the spec's "do not send duplicate
-// notifications" requirement. The actual dedup that stops the SERVER
-// from sending a second one in the first place lives in
-// lib/notifications.ts; this `tag` is a second, client-side layer of
-// the same guarantee.
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 

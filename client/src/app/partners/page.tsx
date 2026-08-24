@@ -31,11 +31,6 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-// Spec section 18. SCOPE (see the habitPartnerships table comment in
-// shared/schema.ts for the full reasoning): Build habits only, each
-// side links one of their own pre-existing habits — nothing is cloned
-// or auto-created, so individual streaks/debt/history are completely
-// unaffected by any of this.
 export default function PartnersPage() {
   const { data: billing } = useBillingStatus();
   const { data: partnerships, isLoading } = usePartnerships();
@@ -52,7 +47,7 @@ export default function PartnersPage() {
             Streak Partners
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Team up on a Build protocol — your shared streak only grows on days you both show up.
+            Team up on a Build protocol, your shared streak only grows on days you both show up.
           </p>
         </div>
 
@@ -185,7 +180,7 @@ function ActivePartnershipCard({
       <CardContent className="space-y-2">
         {!p.sharedTrackingActive && (
           <p className="text-xs text-amber-500">
-            Paused — both people need an active Pro or Premium Plus plan for shared tracking to run.
+            Paused!! Both people need an active Pro or Premium Plus plan for shared tracking to run.
           </p>
         )}
         <div className="flex items-center justify-between text-sm">
@@ -299,13 +294,13 @@ function AcceptPartnershipDialog({ partnership, onClose }: { partnership: Partne
           <DialogTitle>Accept streak partnership</DialogTitle>
           <DialogDescription>
             Choose one of your own Build protocols to link. Your streak and history stay entirely
-            your own — only the shared streak is derived from both.
+            your own, only the shared streak is derived from both.
           </DialogDescription>
         </DialogHeader>
         <div className="py-2">
           {buildHabits.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              You don't have any Build protocols yet — create one first, then come back to accept.
+              You don't have any Build protocols yet, create one first, then come back to accept.
             </p>
           ) : (
             <Select value={selectedHabitId} onValueChange={setSelectedHabitId}>

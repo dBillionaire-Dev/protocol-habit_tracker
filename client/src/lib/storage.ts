@@ -102,19 +102,19 @@ export interface IStorage {
   createHabit(userId: string, habit: CreateHabitRequest): Promise<Habit>;
   updateHabit(id: number, userId: string, updates: UpdateHabitRequest): Promise<Habit>;
   deleteHabit(id: number, userId: string): Promise<void>;
-
+  
   // Avoidance
   logHabitEvent(habitId: number, notes?: string): Promise<HabitEvent>;
   confirmCleanDay(habitId: number, date: string): Promise<{ debt: number }>;
   getTodayEventCount(habitId: number, date: string): Promise<number>;
-
+  
   // Build
   getDailyStatus(habitId: number, date: string): Promise<DailyHabitStatus | undefined>;
   completeDailyTask(habitId: number, date: string, completed: boolean, debtRepayment?: number): Promise<DailyHabitStatus & { debtSummary: BuildDebtSummary }>;
   calculatePenaltyLevel(habitId: number, date: string): Promise<number>;
   getBuildDebtSummary(habitId: number): Promise<BuildDebtSummary>;
   repayBuildDebt(habitId: number, userId: string, amount: number, date: string): Promise<BuildDebtSummary>;
-
+  
   // Streaks
   updateStreak(habitId: number, date: string, isSuccess: boolean): Promise<void>;
 }
@@ -161,9 +161,9 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserPreferences(userId: string, prefs: { showOnboarding?: string }): Promise<void> {
     await db.update(users)
-      .set({
+      .set({ 
         showOnboarding: prefs.showOnboarding,
-        updatedAt: new Date()
+        updatedAt: new Date() 
       })
       .where(eq(users.id, userId));
   }
@@ -669,6 +669,27 @@ export class DatabaseStorage implements IStorage {
     return result?.count ?? 0;
   }
 
+  // Case- and whitespace-insensitive: "Read" and "  read  " count as the
+  // same habit name, matching how a person would actually judge a
+  // duplicate. excludeHabitId lets the rename path check "does this
+  // collide with any OTHER habit of mine" without the habit always
+  // colliding with itself when the name isn't actually changing.
+  async habitNameExists(userId: string, name: string, excludeHabitId?: number): Promise<boolean> {
+    const conditions = [
+      eq(habits.userId, userId),
+      sql`lower(trim(${habits.name})) = lower(trim(${name}))`,
+    ];
+    if (excludeHabitId !== undefined) {
+      conditions.push(sql`${habits.id} != ${excludeHabitId}`);
+    }
+    const [result] = await db
+      .select({ id: habits.id })
+      .from(habits)
+      .where(and(...conditions))
+      .limit(1);
+    return !!result;
+  }
+
   // Resolves the plan actually used for feature gating — the real
   // billing plan, or a super user's full-access/preview override. See
   // entitlements.effectivePlan for the exact rules.
@@ -729,12 +750,12 @@ export class DatabaseStorage implements IStorage {
     // timestamp ties.
     const userHabits = await db.select().from(habits).where(eq(habits.userId, userId)).orderBy(asc(habits.id));
     const today = new Date().toISOString().split('T')[0];
-
+    
     const results: HabitWithStatus[] = [];
-
+    
     for (const habit of userHabits) {
       const h: HabitWithStatus = { ...habit };
-
+      
       if (habit.type === 'avoidance') {
         const [debt] = await db.select().from(habitDebts).where(eq(habitDebts.habitId, habit.id));
         h.debt = debt?.debtCount ?? 0;
@@ -746,7 +767,7 @@ export class DatabaseStorage implements IStorage {
         const penalty = await this.calculatePenaltyLevel(habit.id, today);
         h.penaltyLevel = penalty;
         h.todayTask = (habit.baseTaskValue || 0) + ((habit.baseTaskValue || 0) * penalty);
-
+        
         const status = await this.getDailyStatus(habit.id, today);
         h.todayCompleted = status?.completed ?? false;
         // Check if marked as missed (has status record but not completed)
@@ -759,7 +780,7 @@ export class DatabaseStorage implements IStorage {
       }
       results.push(h);
     }
-
+    
     return results;
   }
 
@@ -769,17 +790,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createHabit(userId: string, habit: CreateHabitRequest): Promise<Habit> {
-    const [newHabit] = await db.insert(habits).values({
-      ...habit,
+    const [newHabit] = await db.insert(habits).values({ 
+      ...habit, 
       userId,
       currentStreak: 0,
       longestStreak: 0,
     }).returning();
-
+    
     if (habit.type === 'avoidance') {
       await db.insert(habitDebts).values({ habitId: newHabit.id, debtCount: 0 });
     }
-
+    
     return newHabit;
   }
 
@@ -802,7 +823,7 @@ export class DatabaseStorage implements IStorage {
   async deleteHabit(id: number, userId: string): Promise<void> {
     const habit = await this.getHabit(id);
     if (!habit || habit.userId !== userId) throw new Error("Unauthorized");
-
+    
     await db.delete(habitEvents).where(eq(habitEvents.habitId, id));
     await db.delete(dailyHabitStatus).where(eq(dailyHabitStatus.habitId, id));
     await db.delete(habitDebts).where(eq(habitDebts.habitId, id));
@@ -816,7 +837,7 @@ export class DatabaseStorage implements IStorage {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
-
+    
     const result = await db.select({ count: count() })
       .from(habitEvents)
       .where(and(
@@ -824,18 +845,18 @@ export class DatabaseStorage implements IStorage {
         gte(habitEvents.timestamp, startOfDay),
         lt(habitEvents.timestamp, endOfDay)
       ));
-
+    
     return result[0]?.count ?? 0;
   }
 
   async logHabitEvent(habitId: number, notes?: string): Promise<HabitEvent> {
     const [event] = await db.insert(habitEvents).values({ habitId, notes }).returning();
-
+    
     // Increment debt
     await db.execute(
       sql`UPDATE habit_debts SET debt_count = debt_count + 1 WHERE habit_id = ${habitId}`
     );
-
+    
     // Reset streak when event is logged (failure for avoidance)
     const habit = await this.getHabit(habitId);
     if (habit) {
@@ -843,29 +864,29 @@ export class DatabaseStorage implements IStorage {
         .set({ currentStreak: 0 })
         .where(eq(habits.id, habitId));
     }
-
+    
     return event;
   }
 
   async confirmCleanDay(habitId: number, date: string): Promise<{ debt: number }> {
     const [debtRecord] = await db.select().from(habitDebts).where(eq(habitDebts.habitId, habitId));
-
+    
     if (debtRecord?.lastCleanDate === date) {
       return { debt: debtRecord.debtCount };
     }
 
     // Reduce debt by 1, min 0
     const [updated] = await db.update(habitDebts)
-      .set({
+      .set({ 
         debtCount: sql`GREATEST(0, debt_count - 1)`,
         lastCleanDate: date
       })
       .where(eq(habitDebts.habitId, habitId))
       .returning();
-
+    
     // Update streak for successful clean day
     await this.updateStreak(habitId, date, true);
-
+      
     return { debt: updated.debtCount };
   }
 
@@ -927,7 +948,7 @@ export class DatabaseStorage implements IStorage {
   async calculatePenaltyLevel(habitId: number, today: string): Promise<number> {
     const habit = await this.getHabit(habitId);
     if (!habit) return 0;
-
+    
     // Check if habit was created today - no penalty on creation day
     const createdDate = new Date(habit.createdAt).toISOString().split('T')[0];
     if (createdDate === today) {
@@ -939,7 +960,7 @@ export class DatabaseStorage implements IStorage {
     if (!isScheduledDay(habit.scheduledDays, today)) {
       return 0;
     }
-
+    
     // Get last completed status before today
     const [lastCompleted] = await db.select()
       .from(dailyHabitStatus)
@@ -976,7 +997,7 @@ export class DatabaseStorage implements IStorage {
   private async updateStreakInTx(tx: DbOrTx, habitId: number, date: string, isSuccess: boolean): Promise<void> {
     const habit = await this.getHabit(habitId);
     if (!habit) return;
-
+    
     if (isSuccess) {
       // Check if this is consecutive. For a habit with no custom
       // schedule, previousScheduledDate is always literal yesterday
@@ -984,32 +1005,32 @@ export class DatabaseStorage implements IStorage {
       // Build habit with day-of-week scheduling, where a streak should
       // survive a rest day rather than break over it.
       const previousRequiredDay = previousScheduledDate(habit.scheduledDays, date);
-
+      
       let newStreak = 1;
       let currentStreakStart = date; // Default: streak starts today
-
+      
       if (habit.lastStreakDate === previousRequiredDay) {
         // Continuing streak
         newStreak = habit.currentStreak + 1;
         currentStreakStart = habit.currentStreakStart || date;
       }
-
+      
       const isNewLongest = newStreak > habit.longestStreak;
       const newLongest = Math.max(habit.longestStreak, newStreak);
-
-      const updateData: any = {
-        currentStreak: newStreak,
+      
+      const updateData: any = { 
+        currentStreak: newStreak, 
         longestStreak: newLongest,
         lastStreakDate: date,
         currentStreakStart,
       };
-
+      
       // Update longest streak dates if this is a new record
       if (isNewLongest) {
         updateData.longestStreakStart = currentStreakStart;
         updateData.longestStreakEnd = null; // Still active
       }
-
+      
       await tx.update(habits)
         .set(updateData)
         .where(eq(habits.id, habitId));
@@ -1017,7 +1038,7 @@ export class DatabaseStorage implements IStorage {
       // Streak broken - record the end date of longest if it was the current streak
       if (habit.currentStreak === habit.longestStreak && habit.currentStreak > 0) {
         await tx.update(habits)
-          .set({
+          .set({ 
             currentStreak: 0,
             currentStreakStart: null,
             longestStreakEnd: habit.lastStreakDate // Record when it ended

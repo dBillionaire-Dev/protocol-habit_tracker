@@ -85,6 +85,8 @@ export function CreateHabitDialog() {
         setLimitReason("plan");
       } else if (error instanceof ApiError && error.code === "GUEST_LIMIT_REACHED") {
         setLimitReason("guest");
+      } else if (error instanceof ApiError && error.code === "DUPLICATE_HABIT_NAME") {
+        form.setError("name", { message: error.message });
       } else {
         console.error(error);
       }

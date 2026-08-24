@@ -49,6 +49,17 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const input = insertHabitSchema.parse(body);
+
+    if (await storage.habitNameExists(user.id, input.name)) {
+      return NextResponse.json(
+        {
+          message: `You already have a protocol named "${input.name}". Choose a different name, or edit the existing one instead.`,
+          code: "DUPLICATE_HABIT_NAME",
+        },
+        { status: 409 },
+      );
+    }
+
     const habit = await storage.createHabit(user.id, input);
 
     // Referral qualification event: "creates first protocol" — only

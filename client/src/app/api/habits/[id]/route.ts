@@ -66,6 +66,20 @@ export async function PATCH(
 
   try {
     const body = updateHabitSchema.parse(await request.json());
+
+    if (
+      body.name !== undefined &&
+      (await storage.habitNameExists(user.id, body.name, Number(id)))
+    ) {
+      return NextResponse.json(
+        {
+          message: `You already have a protocol named "${body.name}". Choose a different name.`,
+          code: "DUPLICATE_HABIT_NAME",
+        },
+        { status: 409 },
+      );
+    }
+
     const updated = await storage.updateHabit(Number(id), user.id, body);
     return NextResponse.json(updated);
   } catch (error) {

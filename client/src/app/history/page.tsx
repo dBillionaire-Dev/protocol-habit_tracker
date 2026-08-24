@@ -192,18 +192,20 @@ export default function HistoryPage() {
                   {data.entries.map((entry, i) => (
                     <div
                       key={`${entry.habitId}-${entry.date}-${i}`}
-                      className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3 px-4 py-3 text-sm"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="text-muted-foreground font-mono text-xs shrink-0 w-20">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="text-muted-foreground font-mono text-xs shrink-0">
                           {format(new Date(`${entry.date}T00:00:00`), "MMM d, yyyy")}
                         </span>
-                        <span className="font-medium truncate">{entry.habitName}</span>
+                        <span className="font-medium truncate max-w-[55vw] sm:max-w-none">
+                          {entry.habitName}
+                        </span>
                         <Badge variant="outline" className="shrink-0 text-[10px]">
                           {entry.type}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
                         {entry.streak !== null && (
                           <span className="text-xs text-muted-foreground font-mono">
                             {entry.streak}d streak

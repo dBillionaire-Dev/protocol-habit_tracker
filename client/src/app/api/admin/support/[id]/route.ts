@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/guard";
+import { requireAnyAdmin } from "@/lib/admin/guard";
 import { getTicket } from "@/lib/support-tickets";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAnyAdmin(request);
   if (!admin) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;

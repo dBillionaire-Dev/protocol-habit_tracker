@@ -9,6 +9,13 @@ export const GUEST_USER_ID = "guest-demo-user";
 // indefinitely just because the browser still has the flag set.
 const GUEST_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 
+// Real accounts get their OWN independent 7-day enforcement, on top of
+// whatever Supabase's own refresh-token lifetime is configured to (which
+// this app doesn't control/verify). Compared against users.lastLoginAt,
+// which is only stamped at an actual sign-in event -- see that column's
+// comment in shared/models/auth.ts for why it's not just "last request".
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 export interface ResolvedUser {
   id: string;
   email: string | null;
@@ -104,6 +111,17 @@ export async function resolveUser(
   // unauthenticated everywhere in the app -- this is the single place
   // that enforces it, since every route resolves the user through here.
   if (profile.status === "suspended") {
+    return null;
+  }
+
+  // Independent 7-day enforcement, regardless of whether the underlying
+  // Supabase session cookie is still technically valid -- see
+  // SESSION_MAX_AGE_MS above. A null lastLoginAt (never logged in via
+  // the mark-login path -- e.g. an account that predates this column)
+  // is treated the same as "expired": both require a fresh sign-in
+  // rather than silently trusting an unverifiable session age.
+  const lastLoginMs = profile.lastLoginAt ? new Date(profile.lastLoginAt).getTime() : null;
+  if (lastLoginMs === null || Date.now() - lastLoginMs > SESSION_MAX_AGE_MS) {
     return null;
   }
 

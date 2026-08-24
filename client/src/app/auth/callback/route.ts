@@ -44,6 +44,18 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Stamp lastLoginAt for the 7-day session-enforcement check in
+      // require-user.ts. Only reached on a genuine OAuth sign-in (this
+      // callback only fires right after Google hands back a fresh code),
+      // never on routine navigation -- matching the "explicit login
+      // only" contract that column relies on. Skipped for the
+      // password-recovery `next` path, since exchanging that code
+      // establishes a temporary session for resetting a password, not an
+      // actual sign-in.
+      if (user?.id && !next.startsWith("/reset-password")) {
+        await storage.markUserLoggedIn(user.id);
+      }
+
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

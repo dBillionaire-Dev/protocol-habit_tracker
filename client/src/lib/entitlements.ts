@@ -117,7 +117,8 @@ export type FeatureKey =
   | "ai_planning"
   | "accountability"
   | "unrestricted_habit_editing"
-  | "flexible_confirmation";
+  | "flexible_confirmation"
+  | "streak_partners";
 
 const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
   advanced_analytics: ["pro", "premium_plus"],
@@ -137,6 +138,10 @@ const FEATURE_MATRIX: Record<FeatureKey, readonly PlanTier[]> = {
   // api/habits/[id]/clean-day/route.ts and useConfirmationWindow in
   // day-confirmation-card.tsx). Free and Pro remain window-restricted.
   flexible_confirmation: ["premium_plus"],
+  // Spec section 18: "This is a Pro and Premium Plus feature" —
+  // explicitly both tiers, unlike most other Premium-Plus-only gates
+  // above.
+  streak_partners: ["pro", "premium_plus"],
 };
 
 export function hasFeature(plan: PlanTier, feature: FeatureKey): boolean {

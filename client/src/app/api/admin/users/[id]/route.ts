@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin/guard";
+import { requireAdmin, requireAnyAdmin } from "@/lib/admin/guard";
 import { getUserDetail, logAdminAction } from "@/lib/admin/storage";
 import { storage } from "@/lib/storage";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, { params }: RouteParams) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAnyAdmin(request);
   if (!admin) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;

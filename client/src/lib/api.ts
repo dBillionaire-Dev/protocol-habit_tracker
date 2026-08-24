@@ -3,8 +3,13 @@
 const GUEST_MODE_KEY = "protocol:guestMode";
 // Set once, the moment guest mode is first entered -- lets the server
 // (see lib/auth/require-user.ts) enforce a real 1-day expiry on guest
-// sessions instead of trusting the flag indefinitely.
-const GUEST_STARTED_AT_KEY = "protocol:guestStartedAt";
+// sessions instead of trusting the flag indefinitely. Exported so
+// guest-storage.ts can enforce the same 1-day limit on guest HABIT DATA
+// using this exact same timestamp, rather than tracking a second,
+// separate expiry clock that could drift out of sync with the session
+// one.
+export const GUEST_STARTED_AT_KEY = "protocol:guestStartedAt";
+export const GUEST_SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 1 day
 
 export function isGuestMode(): boolean {
   if (typeof window === "undefined") return false;

@@ -9,9 +9,10 @@ import {
   bugReports, type BugReport, type InsertBugReport,
   pushSubscriptions, type PushSubscriptionRow, type InsertPushSubscription,
   notificationPreferences, type NotificationPreferences, type NotificationCategory,
+  habitPartnerships, type HabitPartnership, type InsertHabitPartnership, type PartnershipStatus,
 } from "shared/schema";
-import { eq, and, desc, asc, sql, gte, lt, count } from "drizzle-orm";
-import { effectivePlan } from "./entitlements";
+import { eq, and, or, desc, asc, sql, gte, lt, count } from "drizzle-orm";
+import { effectivePlan, hasFeature } from "./entitlements";
 import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween } from "shared/schema";
 import type { PlanTier } from "shared/schema";
 
@@ -23,6 +24,40 @@ export class DebtRepaymentError extends Error {}
 // inside an existing transaction take this type so callers can pass
 // either `db` or a `tx`.
 type DbOrTx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
+
+// Everything the UI needs to render one partnership row, from either
+// party's point of view — the API route resolves "me" vs. "the other
+// person" using whichever of initiatorUserId/partnerUserId matches the
+// requesting user. See the habitPartnerships table comment in
+// shared/schema.ts for the overall design (each side links their own
+// pre-existing Build habit; nothing is shared/cloned).
+export interface PartnershipView {
+  id: number;
+  status: PartnershipStatus;
+  initiatorUserId: string;
+  initiatorEmail: string;
+  initiatorHabitId: number;
+  initiatorHabitName: string;
+  partnerUserId: string;
+  partnerEmail: string;
+  partnerHabitId: number | null;
+  partnerHabitName: string | null;
+  invitedAt: Date;
+  respondedAt: Date | null;
+  endedAt: Date | null;
+  bestSharedStreak: number;
+  // Only meaningful once accepted (both habits linked) — see
+  // storage.computeSharedStreak.
+  currentSharedStreak: number;
+  initiatorCompletedToday: boolean;
+  partnerCompletedToday: boolean;
+  // False if either party's CURRENT effective plan no longer includes
+  // streak_partners (e.g. a subscription lapsed) — the partnership row
+  // and both underlying habits are left completely untouched either
+  // way; this only affects whether the UI treats it as live right now.
+  // Resumes automatically the moment both parties are eligible again.
+  sharedTrackingActive: boolean;
+}
 
 export interface IStorage {
   // Auth
@@ -54,6 +89,12 @@ export interface IStorage {
   ): Promise<NotificationPreferences>;
   getUsersDueForConfirmationWindowPush(): Promise<{ userId: string; endpoint: string; p256dhKey: string; authKey: string }[]>;
   markConfirmationWindowPushSent(userId: string): Promise<void>;
+  createPartnership(initiatorUserId: string, initiatorHabitId: number, partnerEmail: string): Promise<HabitPartnership>;
+  getPartnershipsForUser(userId: string): Promise<PartnershipView[]>;
+  acceptPartnership(partnershipId: number, partnerUserId: string, partnerHabitId: number): Promise<HabitPartnership>;
+  declinePartnership(partnershipId: number, userId: string): Promise<HabitPartnership>;
+  cancelPartnership(partnershipId: number, userId: string): Promise<HabitPartnership>;
+  endPartnership(partnershipId: number, userId: string): Promise<HabitPartnership>;
 
   // Habits
   getHabits(userId: string): Promise<HabitWithStatus[]>;
@@ -357,6 +398,254 @@ export class DatabaseStorage implements IStorage {
       .update(notificationPreferences)
       .set({ lastConfirmationWindowPushDate: today, updatedAt: new Date() })
       .where(eq(notificationPreferences.userId, userId));
+  }
+
+  // --- Shared Streak Partners ---
+
+  async createPartnership(
+    initiatorUserId: string,
+    initiatorHabitId: number,
+    partnerEmail: string,
+  ): Promise<HabitPartnership> {
+    const habit = await this.getHabit(initiatorHabitId);
+    if (!habit || habit.userId !== initiatorUserId) {
+      throw new Error("You don't own that protocol.");
+    }
+    if (habit.type !== "build") {
+      throw new Error("Only Build protocols can have a streak partner right now.");
+    }
+
+    const partner = await this.getUserByEmail(partnerEmail.toLowerCase());
+    if (!partner) {
+      throw new Error("No Protocol account found with that email.");
+    }
+    if (partner.id === initiatorUserId) {
+      throw new Error("You can't invite yourself.");
+    }
+
+    // Application-level dedup (not a DB constraint — see the schema
+    // comment on why a plain unique index can't express "unique only
+    // among pending invites"): refuse a second pending invite for the
+    // same habit+partner, but allow re-inviting after a decline,
+    // cancellation, or ended partnership.
+    const existingPending = await db
+      .select()
+      .from(habitPartnerships)
+      .where(
+        and(
+          eq(habitPartnerships.initiatorHabitId, initiatorHabitId),
+          eq(habitPartnerships.partnerUserId, partner.id),
+          eq(habitPartnerships.status, "pending"),
+        ),
+      );
+    if (existingPending.length > 0) {
+      throw new Error("You already have a pending invite to this person for this protocol.");
+    }
+
+    const [created] = await db
+      .insert(habitPartnerships)
+      .values({
+        initiatorUserId,
+        initiatorHabitId,
+        partnerUserId: partner.id,
+        status: "pending",
+      })
+      .returning();
+    return created;
+  }
+
+  async acceptPartnership(partnershipId: number, partnerUserId: string, partnerHabitId: number): Promise<HabitPartnership> {
+    const [partnership] = await db.select().from(habitPartnerships).where(eq(habitPartnerships.id, partnershipId));
+    if (!partnership || partnership.partnerUserId !== partnerUserId) {
+      throw new Error("Invite not found.");
+    }
+    if (partnership.status !== "pending") {
+      throw new Error("This invite is no longer pending.");
+    }
+
+    const habit = await this.getHabit(partnerHabitId);
+    if (!habit || habit.userId !== partnerUserId) {
+      throw new Error("You don't own that protocol.");
+    }
+    if (habit.type !== "build") {
+      throw new Error("Only Build protocols can be linked as a streak partner.");
+    }
+
+    const [updated] = await db
+      .update(habitPartnerships)
+      .set({ status: "accepted", partnerHabitId, respondedAt: new Date() })
+      .where(eq(habitPartnerships.id, partnershipId))
+      .returning();
+    return updated;
+  }
+
+  async declinePartnership(partnershipId: number, userId: string): Promise<HabitPartnership> {
+    const [partnership] = await db.select().from(habitPartnerships).where(eq(habitPartnerships.id, partnershipId));
+    if (!partnership || partnership.partnerUserId !== userId) {
+      throw new Error("Invite not found.");
+    }
+    if (partnership.status !== "pending") {
+      throw new Error("This invite is no longer pending.");
+    }
+    const [updated] = await db
+      .update(habitPartnerships)
+      .set({ status: "declined", respondedAt: new Date() })
+      .where(eq(habitPartnerships.id, partnershipId))
+      .returning();
+    return updated;
+  }
+
+  async cancelPartnership(partnershipId: number, userId: string): Promise<HabitPartnership> {
+    const [partnership] = await db.select().from(habitPartnerships).where(eq(habitPartnerships.id, partnershipId));
+    if (!partnership || partnership.initiatorUserId !== userId) {
+      throw new Error("Invite not found.");
+    }
+    if (partnership.status !== "pending") {
+      throw new Error("This invite is no longer pending.");
+    }
+    const [updated] = await db
+      .update(habitPartnerships)
+      .set({ status: "cancelled", respondedAt: new Date() })
+      .where(eq(habitPartnerships.id, partnershipId))
+      .returning();
+    return updated;
+  }
+
+  async endPartnership(partnershipId: number, userId: string): Promise<HabitPartnership> {
+    const [partnership] = await db.select().from(habitPartnerships).where(eq(habitPartnerships.id, partnershipId));
+    if (!partnership || (partnership.initiatorUserId !== userId && partnership.partnerUserId !== userId)) {
+      throw new Error("Partnership not found.");
+    }
+    if (partnership.status !== "accepted") {
+      throw new Error("This partnership isn't active.");
+    }
+    // Either party can end it unilaterally — no "both must agree"
+    // requirement, matching the spec's "either user can end the
+    // partnership at any time." Neither underlying habit is touched.
+    const [updated] = await db
+      .update(habitPartnerships)
+      .set({ status: "ended", endedAt: new Date(), endedByUserId: userId })
+      .where(eq(habitPartnerships.id, partnershipId))
+      .returning();
+    return updated;
+  }
+
+  // Walks backward day-by-day from today, counting a day toward the
+  // shared streak only when BOTH linked habits show completed=true for
+  // that date. SIMPLIFICATION, stated plainly: this assumes plain daily
+  // cadence and does not account for either habit's own custom
+  // scheduledDays rest days (see isScheduledDay in shared/schema.ts) —
+  // teaching the shared-streak walk to honor two potentially-different
+  // custom schedules at once is a real design question left for a
+  // follow-up rather than guessed at here.
+  private async computeSharedStreak(
+    initiatorHabitId: number,
+    partnerHabitId: number,
+  ): Promise<{ current: number; initiatorCompletedToday: boolean; partnerCompletedToday: boolean }> {
+    const [initiatorRows, partnerRows] = await Promise.all([
+      db.select().from(dailyHabitStatus).where(eq(dailyHabitStatus.habitId, initiatorHabitId)),
+      db.select().from(dailyHabitStatus).where(eq(dailyHabitStatus.habitId, partnerHabitId)),
+    ]);
+    const initiatorByDate = new Map(initiatorRows.map((r) => [r.date, r.completed]));
+    const partnerByDate = new Map(partnerRows.map((r) => [r.date, r.completed]));
+
+    const today = new Date();
+    const todayKey = today.toISOString().split("T")[0];
+    const initiatorCompletedToday = initiatorByDate.get(todayKey) === true;
+    const partnerCompletedToday = partnerByDate.get(todayKey) === true;
+
+    let current = 0;
+    const cursor = new Date(today);
+    // Bounded at ~2 years of daily checks — a generous ceiling, not a
+    // realistic case this would actually hit, purely to guarantee this
+    // loop terminates even against corrupted/unexpected data.
+    for (let i = 0; i < 730; i++) {
+      const key = cursor.toISOString().split("T")[0];
+      const bothCompleted = initiatorByDate.get(key) === true && partnerByDate.get(key) === true;
+      if (!bothCompleted) {
+        // Today not being done yet (day still in progress) shouldn't
+        // break the streak counted through yesterday — skip only
+        // today's gap once, exactly like the individual habit streak
+        // convention elsewhere in this app.
+        if (key === todayKey) {
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
+          continue;
+        }
+        break;
+      }
+      current++;
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+
+    return { current, initiatorCompletedToday, partnerCompletedToday };
+  }
+
+  async getPartnershipsForUser(userId: string): Promise<PartnershipView[]> {
+    const rows = await db
+      .select()
+      .from(habitPartnerships)
+      .where(or(eq(habitPartnerships.initiatorUserId, userId), eq(habitPartnerships.partnerUserId, userId)));
+
+    const views: PartnershipView[] = [];
+    for (const row of rows) {
+      const [initiatorUser, partnerUser, initiatorHabit, partnerHabit] = await Promise.all([
+        this.getUser(row.initiatorUserId),
+        this.getUser(row.partnerUserId),
+        this.getHabit(row.initiatorHabitId),
+        row.partnerHabitId ? this.getHabit(row.partnerHabitId) : Promise.resolve(undefined),
+      ]);
+
+      let currentSharedStreak = 0;
+      let initiatorCompletedToday = false;
+      let partnerCompletedToday = false;
+      let sharedTrackingActive = false;
+
+      if (row.status === "accepted" && row.partnerHabitId) {
+        const [initiatorPlan, partnerPlan] = await Promise.all([
+          this.getEffectivePlan(row.initiatorUserId, false),
+          this.getEffectivePlan(row.partnerUserId, false),
+        ]);
+        sharedTrackingActive = hasFeature(initiatorPlan, "streak_partners") && hasFeature(partnerPlan, "streak_partners");
+
+        if (sharedTrackingActive) {
+          const streak = await this.computeSharedStreak(row.initiatorHabitId, row.partnerHabitId);
+          currentSharedStreak = streak.current;
+          initiatorCompletedToday = streak.initiatorCompletedToday;
+          partnerCompletedToday = streak.partnerCompletedToday;
+
+          if (currentSharedStreak > row.bestSharedStreak) {
+            await db
+              .update(habitPartnerships)
+              .set({ bestSharedStreak: currentSharedStreak })
+              .where(eq(habitPartnerships.id, row.id));
+            row.bestSharedStreak = currentSharedStreak;
+          }
+        }
+      }
+
+      views.push({
+        id: row.id,
+        status: row.status as PartnershipStatus,
+        initiatorUserId: row.initiatorUserId,
+        initiatorEmail: initiatorUser?.email ?? "",
+        initiatorHabitId: row.initiatorHabitId,
+        initiatorHabitName: initiatorHabit?.name ?? "",
+        partnerUserId: row.partnerUserId,
+        partnerEmail: partnerUser?.email ?? "",
+        partnerHabitId: row.partnerHabitId,
+        partnerHabitName: partnerHabit?.name ?? null,
+        invitedAt: row.invitedAt,
+        respondedAt: row.respondedAt,
+        endedAt: row.endedAt,
+        bestSharedStreak: row.bestSharedStreak,
+        currentSharedStreak,
+        initiatorCompletedToday,
+        partnerCompletedToday,
+        sharedTrackingActive,
+      });
+    }
+
+    return views.sort((a, b) => b.invitedAt.getTime() - a.invitedAt.getTime());
   }
 
   async countActiveHabits(userId: string): Promise<number> {

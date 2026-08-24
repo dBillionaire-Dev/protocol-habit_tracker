@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { resolveUser, type ResolvedUser } from "@/lib/auth/require-user";
+import { getAdminContext, type AdminContext } from "@/lib/admin/guard";
 
 /**
  * Page-level (Server Component) equivalent of lib/admin/guard.ts's
@@ -14,4 +15,13 @@ export async function requireAdminPage(): Promise<ResolvedUser> {
     redirect("/dashboard");
   }
   return user;
+}
+
+/** Either admin tier. Use this for the shared /admin layout guard. */
+export async function requireAnyAdminPage(): Promise<AdminContext> {
+  const ctx = await getAdminContext(new Request("http://localhost/admin"));
+  if (!ctx) {
+    redirect("/dashboard");
+  }
+  return ctx;
 }

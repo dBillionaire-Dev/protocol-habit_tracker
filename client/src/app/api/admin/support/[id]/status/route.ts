@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/admin/guard";
+import { requireAnyAdmin } from "@/lib/admin/guard";
 import { setTicketStatus } from "@/lib/support-tickets";
 import { logAdminAction } from "@/lib/admin/storage";
 
 const inputSchema = z.object({ status: z.enum(["open", "pending", "resolved"]) });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin(request);
+  const admin = await requireAnyAdmin(request);
   if (!admin) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;

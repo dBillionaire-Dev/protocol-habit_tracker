@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Shield, Lock, Activity, TrendingUp, User, Mail, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { captureReferralCodeFromUrl } from "@/lib/referral-capture";
 
 export default function LandingPage() {
+  const router = useRouter();
   const {
+    user,
+    isLoading: isAuthCheckLoading,
     loginAsGuest,
     isGuestLoggingIn,
     loginWithGoogle,
@@ -27,6 +31,25 @@ export default function LandingPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // If a valid session already exists (token not expired, account still
+  // logged in), skip the login screen entirely and land on the
+  // dashboard instead -- "don't make me log in every launch". If the
+  // session is missing/expired, or the person never had one, `user`
+  // stays null and this does nothing, leaving the login form below in
+  // place exactly as before.
+  //
+  // Gated on the same isAuthCheckLoading that AppShell's splash uses for
+  // its `appReady` prop, so this redirect completes *while the splash is
+  // still covering the screen* -- no visible flash of the login form
+  // before bouncing to /dashboard.
+  const redirectingToDashboard = !isAuthCheckLoading && !!user;
+
+  useEffect(() => {
+    if (redirectingToDashboard) {
+      router.replace("/dashboard");
+    }
+  }, [redirectingToDashboard, router]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -89,6 +112,16 @@ export default function LandingPage() {
     setError("");
     loginAsGuest();
   };
+
+  // While the session check is still in flight, or a redirect to
+  // /dashboard is already underway, render nothing rather than the full
+  // login form -- the splash screen (if showing) already covers this,
+  // and even on a repeat-within-session mount where the splash is
+  // skipped, this avoids flashing the login UI for what should be a
+  // near-instant redirect.
+  if (isAuthCheckLoading || redirectingToDashboard) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">

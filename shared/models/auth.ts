@@ -1,5 +1,11 @@
 import { pgTable, varchar, timestamp, boolean, serial, integer, text, unique, type AnyPgColumn } from "drizzle-orm/pg-core";
 
+export const USER_STATUSES = ["active", "suspended"] as const;
+export type UserStatus = typeof USER_STATUSES[number];
+
+export const ADMIN_ROLES = ["support_admin"] as const;
+export type DbAdminRole = typeof ADMIN_ROLES[number];
+
 // Profile table. Rows here are keyed 1:1 with Supabase's `auth.users.id`
 // (a uuid). Supabase Auth owns credentials/identities; this table only
 // holds the app-specific profile fields we care about.
@@ -17,14 +23,19 @@ export const users = pgTable("users", {
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
   showOnboarding: varchar("show_onboarding").default("true"),
-  // Account status (e.g. "active", possibly "suspended"/other values
-  // depending on how an admin dashboard elsewhere in this project
-  // manages it — that admin surface isn't part of this working copy, so
-  // this column is restored here verbatim from the live database schema
-  // (varchar, NOT NULL, default 'active') purely so drizzle-kit push
-  // stops proposing to drop it. Not read, written, or enforced anywhere
-  // in the code touched by any of these waves.
-  status: varchar("status").notNull().default("active"),
+  // Account status, managed by the admin dashboard (suspend/restore --
+  // see lib/admin/storage.ts). Suspended users are blocked at
+  // resolveUser() in require-user.ts, which treats them as
+  // unauthenticated everywhere even though their Supabase session is
+  // still technically valid.
+  status: varchar("status", { enum: USER_STATUSES }).notNull().default("active"),
+  // Admin dashboard role. Separate from isSuperUser (which only gates
+  // the plan-preview feature) -- null means "not an admin at all". This
+  // column NEVER holds "super_admin"; that tier is always derived live
+  // from isSuperUser / SUPER_USER_EMAILS (see lib/admin/guard.ts), so
+  // the top tier can never be locked out by a bad DB write.
+  // "support_admin" is DB-only, granted/revoked from /admin/admins.
+  adminRole: varchar("admin_role", { enum: ADMIN_ROLES }),
   // Full access to every feature/tier regardless of billing status, for
   // internal testing. Set automatically on login based on the
   // SUPER_USER_EMAILS env var allow-list (see require-user.ts) — not
@@ -38,6 +49,18 @@ export const users = pgTable("users", {
   // only (POST /api/referrals/attribute), never changeable afterward.
   // Nullable self-reference: a user's referrer is another user.
   referredByUserId: varchar("referred_by_user_id").references((): AnyPgColumn => users.id),
+  // Stamped ONLY at a genuine sign-in event (email/password success, or
+  // Google OAuth callback completing) -- see require-user.ts's markLogin
+  // usage and app/auth/callback/route.ts. Deliberately NOT touched by the
+  // routine per-request profile upsert in resolveUser(), which would turn
+  // this into a rolling "last seen" timestamp instead of a fixed
+  // "last explicit login" one. require-user.ts compares this against a
+  // 7-day limit and treats a stale value as an expired session, even if
+  // the underlying Supabase cookie is technically still valid -- this is
+  // the app's own independent enforcement of that window, not delegated
+  // to whatever Supabase's own refresh-token lifetime happens to be set
+  // to.
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

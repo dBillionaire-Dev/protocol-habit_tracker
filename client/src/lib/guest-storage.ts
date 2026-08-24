@@ -7,6 +7,7 @@ import type {
   HabitType,
 } from "shared/schema";
 import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween, FREE_PLAN_HABIT_EDIT_WINDOW_MS } from "shared/schema";
+import { GUEST_STARTED_AT_KEY, GUEST_SESSION_MAX_AGE_MS } from "@/lib/api";
 
 /**
  * Guest-mode data layer. Mirrors the same debt/streak/penalty rules as
@@ -75,6 +76,20 @@ function todayStr(): string {
 function load(): GuestHabit[] {
   if (typeof window === "undefined") return [];
   try {
+    // Guest habit data is capped to the same 1-day window as the guest
+    // session itself (see api.ts's GUEST_STARTED_AT_KEY / require-user.ts's
+    // server-side enforcement) -- a guest's habits shouldn't outlive their
+    // "session" just because localStorage itself never expires anything on
+    // its own. Reusing the exact same timestamp as the session check means
+    // there's one clock to reason about, not two that could drift apart.
+    const startedAt = window.localStorage.getItem(GUEST_STARTED_AT_KEY);
+    if (startedAt) {
+      const startedMs = Date.parse(startedAt);
+      if (!Number.isNaN(startedMs) && Date.now() - startedMs > GUEST_SESSION_MAX_AGE_MS) {
+        window.localStorage.removeItem(STORAGE_KEY);
+        return [];
+      }
+    }
     const raw = window.localStorage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as GuestHabit[]) : [];
   } catch {

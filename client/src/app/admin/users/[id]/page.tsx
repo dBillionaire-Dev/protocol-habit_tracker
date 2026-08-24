@@ -24,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { StatCard } from "@/components/admin/stat-card";
+import { useAdminRole } from "@/hooks/use-admin-role";
 
 interface UserDetail {
   user: {
@@ -55,6 +56,8 @@ export default function AdminUserDetailPage() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({ queryKey: ["admin-user", id], queryFn: () => fetchDetail(id) });
+  const { data: me } = useAdminRole();
+  const isSuperAdmin = me?.role === "super_admin";
 
   const [plan, setPlan] = useState("free");
   const [interval, setIntervalValue] = useState("monthly");
@@ -123,91 +126,97 @@ export default function AdminUserDetailPage() {
         </p>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Actions</h2>
-        <div className="flex flex-wrap gap-3">
-          {user.status === "active" ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm">
-                  Suspend account
+      {isSuperAdmin && (
+        <>
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Actions</h2>
+            <div className="flex flex-wrap gap-3">
+              {user.status === "active" ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">
+                      Suspend account
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Suspend this account?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {name} will be signed out of the app everywhere and unable to sign back in until restored.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => suspendMutation.mutate()}>Suspend</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => restoreMutation.mutate()}>
+                  Restore account
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Suspend this account?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {name} will be signed out of the app everywhere and unable to sign back in until restored.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => suspendMutation.mutate()}>Suspend</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => restoreMutation.mutate()}>
-              Restore account
-            </Button>
-          )}
+              )}
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                Delete account
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm">
+                    Delete account
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Permanently delete this account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This deletes {name}&apos;s profile, habits, and history. This cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => deleteMutation.mutate()}>Delete permanently</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </section>
+
+          <section className="space-y-3 border-t border-border pt-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Change plan (override)
+            </h2>
+            <p className="text-xs text-muted-foreground max-w-md">
+              This only changes what PROTOCOL thinks this user&apos;s plan is -- it does not touch Paystack. Use
+              for comps or support fixes, not to grant paid access without real payment. The next real Paystack
+              webhook for this user overwrites this.
+            </p>
+            <div className="flex gap-3 items-center">
+              <Select value={plan} onValueChange={setPlan}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="free">Free</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                  <SelectItem value="premium_plus">Premium Plus</SelectItem>
+                </SelectContent>
+              </Select>
+              {plan !== "free" && (
+                <Select value={interval} onValueChange={setIntervalValue}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Button size="sm" onClick={() => changePlanMutation.mutate()} disabled={changePlanMutation.isPending}>
+                Apply
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Permanently delete this account?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This deletes {name}&apos;s profile, habits, and history. This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => deleteMutation.mutate()}>Delete permanently</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </section>
-
-      <section className="space-y-3 border-t border-border pt-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Change plan (override)</h2>
-        <p className="text-xs text-muted-foreground max-w-md">
-          This only changes what PROTOCOL thinks this user&apos;s plan is -- it does not touch Paystack. Use for
-          comps or support fixes, not to grant paid access without real payment. The next real Paystack webhook for
-          this user overwrites this.
-        </p>
-        <div className="flex gap-3 items-center">
-          <Select value={plan} onValueChange={setPlan}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="free">Free</SelectItem>
-              <SelectItem value="pro">Pro</SelectItem>
-              <SelectItem value="premium_plus">Premium Plus</SelectItem>
-            </SelectContent>
-          </Select>
-          {plan !== "free" && (
-            <Select value={interval} onValueChange={setIntervalValue}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="annual">Annual</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          <Button size="sm" onClick={() => changePlanMutation.mutate()} disabled={changePlanMutation.isPending}>
-            Apply
-          </Button>
-        </div>
-      </section>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }

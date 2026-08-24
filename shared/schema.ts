@@ -347,3 +347,69 @@ export const NOTIFICATION_CATEGORIES = [
   "importantAnnouncements",
 ] as const;
 export type NotificationCategory = typeof NOTIFICATION_CATEGORIES[number];
+
+// --- Shared Streak Partners (spec section 18) ---
+//
+// SCOPE, decided deliberately: Build habits only for v1. Avoidance's
+// clean-day-confirmation model (a single explicit action per day, no
+// per-day "task" the way Build has) doesn't map onto "did both partners
+// complete today" as directly, and extending this to Avoidance is a
+// separate design question left for later rather than guessed at here.
+//
+// DESIGN: each partner links one of their OWN existing Build habits —
+// there is no shared/cloned "habit" row. This is what makes "individual
+// streaks remain separate from shared streaks" and "do not automatically
+// merge users' private habit data" true by construction rather than by
+// convention: habitA and habitB are two completely ordinary, independently-
+// owned rows in the existing `habits` table, each keeping its own streak,
+// debt, and history exactly as it always has. A partnership is purely an
+// observational join across the two — it reads both habits' existing
+// dailyHabitStatus rows to derive a shared streak (see
+// storage.computeSharedStreak), and never writes to either habit.
+//
+// This also means ending a partnership can never lose data: deleting
+// the partnership row (or marking it "ended") doesn't touch either
+// habit at all.
+export const PARTNERSHIP_STATUSES = ["pending", "accepted", "declined", "cancelled", "ended"] as const;
+export type PartnershipStatus = typeof PARTNERSHIP_STATUSES[number];
+
+export const habitPartnerships = pgTable("habit_partnerships", {
+  id: serial("id").primaryKey(),
+  initiatorUserId: varchar("initiator_user_id").notNull().references(() => users.id),
+  initiatorHabitId: integer("initiator_habit_id").notNull().references(() => habits.id),
+  // Resolved from the invited email at invite time — the invited person
+  // must already have a Protocol account. Nullable only in the sense
+  // that the column always has a value once a row exists; kept as its
+  // own field (rather than assuming it's always resolvable) because the
+  // invite route validates this before ever inserting a row.
+  partnerUserId: varchar("partner_user_id").notNull().references(() => users.id),
+  // Set only once the invite is accepted — the partner's own Build
+  // habit they've chosen to link. Null while pending/declined/cancelled.
+  partnerHabitId: integer("partner_habit_id").references(() => habits.id),
+  status: varchar("status", { enum: PARTNERSHIP_STATUSES }).notNull().default("pending"),
+  invitedAt: timestamp("invited_at").defaultNow().notNull(),
+  respondedAt: timestamp("responded_at"), // accepted/declined timestamp
+  endedAt: timestamp("ended_at"),
+  endedByUserId: varchar("ended_by_user_id").references(() => users.id),
+  // Best shared streak ever reached, snapshotted here because the live
+  // streak is DERIVED (see computeSharedStreak) and derivation only
+  // looks at habits that still exist and are still linked — if either
+  // partner's habit were ever deleted, the running derivation would
+  // lose the ability to recompute historical bests. Updated opportunistically
+  // whenever the current derived streak is computed and exceeds this.
+  bestSharedStreak: integer("best_shared_streak").notNull().default(0),
+}, (table) => ({
+  // NOTE: no DB-level uniqueness constraint on (initiatorHabitId,
+  // partnerUserId) — a partial/conditional constraint (unique only
+  // among non-terminal rows) is what's actually wanted here, since
+  // re-inviting the same partner after a decline/cancellation/ending is
+  // allowed. Enforced instead in storage.createPartnership, which checks
+  // for an existing PENDING invite for the same pair before inserting.
+  // This trades away a DB-level backstop against a rare simultaneous-
+  // double-invite race for straightforward, correct behavior rather than
+  // a schema constraint that can't actually express "unique among only
+  // some rows" without a partial index.
+}));
+
+export type HabitPartnership = typeof habitPartnerships.$inferSelect;
+export type InsertHabitPartnership = typeof habitPartnerships.$inferInsert;

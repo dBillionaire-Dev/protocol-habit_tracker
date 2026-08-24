@@ -13,8 +13,10 @@
     "drizzle-kit": "^0.31.8"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.1",
+    "pg": "8.22.0",
     "zod": "^4.4.3"
   },
   "packageManager": "pnpm@10.34.5"

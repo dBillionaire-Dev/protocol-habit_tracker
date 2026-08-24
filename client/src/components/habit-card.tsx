@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
-import { Check, Plus, Minus, Trash2, Flame, Pencil } from "lucide-react";
+import { Check, Plus, Minus, Trash2, Flame, Pencil, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
@@ -41,6 +41,7 @@ import {
 } from "@/hooks/use-habits";
 import { useBillingStatus } from "@/hooks/use-billing";
 import { hasFeature } from "@/lib/entitlements";
+import { useInvitePartner } from "@/hooks/use-partnerships";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConfirmationWindow } from "@/components/day-confirmation-card";
@@ -125,6 +126,28 @@ export function HabitCard({ habit }: HabitCardProps) {
   const canConfirmCleanDay = isWindowOpen || canConfirmAnytime;
   const [confirmCleanError, setConfirmCleanError] = useState<string | null>(null);
   const [missedError, setMissedError] = useState<string | null>(null);
+
+  // --- Streak Partners (Build only, spec section 18) ---
+  const canInvitePartner = hasFeature(billing?.plan ?? "free", "streak_partners");
+  const invitePartnerMutation = useInvitePartner();
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [invitePartnerEmail, setInvitePartnerEmail] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  function submitInvite() {
+    setInviteError(null);
+    invitePartnerMutation.mutate(
+      { habitId: habit.id, partnerEmail: invitePartnerEmail },
+      {
+        onSuccess: () => {
+          setInviteDialogOpen(false);
+          setInvitePartnerEmail("");
+          toast({ title: "✓ Invite sent", description: "They'll see it next time they check their Streak Partners page." });
+        },
+        onError: (err) => setInviteError(err instanceof Error ? err.message : "Something went wrong."),
+      },
+    );
+  }
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState(habit.name);
@@ -427,6 +450,16 @@ export function HabitCard({ habit }: HabitCardProps) {
             </div>
             <DeleteButton onDelete={handleDelete} isDeleting={deleteMutation.isPending} />
             <EditButton onEdit={openEditDialog} canEdit={canEdit} canEditAnytime={canEditAnytime} />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground disabled:opacity-40"
+              onClick={() => setInviteDialogOpen(true)}
+              disabled={!canInvitePartner}
+              title={canInvitePartner ? "Invite a streak partner" : "Streak Partners is a Pro and Premium Plus feature"}
+            >
+              <UserPlus className="w-3 h-3" />
+            </Button>
           </div>
           {remainingDebt > 0 && (
             <div className="flex items-center gap-1">
@@ -674,6 +707,40 @@ export function HabitCard({ habit }: HabitCardProps) {
             </Button>
             <Button onClick={confirmEdit} disabled={updateMutation.isPending || !editName.trim()}>
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={inviteDialogOpen} onOpenChange={(open) => { setInviteDialogOpen(open); if (!open) setInviteError(null); }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Invite a streak partner</DialogTitle>
+            <DialogDescription>
+              They'll need an existing Protocol account. Once they accept, your shared streak only
+              grows on days you BOTH complete this protocol — your own streak and history stay
+              entirely separate either way.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor={`invite-email-${habit.id}`}>Their email</Label>
+              <Input
+                id={`invite-email-${habit.id}`}
+                type="email"
+                placeholder="partner@example.com"
+                value={invitePartnerEmail}
+                onChange={(e) => setInvitePartnerEmail(e.target.value)}
+              />
+            </div>
+            {inviteError && <p className="text-sm text-destructive">{inviteError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteDialogOpen(false)} disabled={invitePartnerMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={submitInvite} disabled={invitePartnerMutation.isPending || !invitePartnerEmail.trim()}>
+              {invitePartnerMutation.isPending ? "Sending..." : "Send Invite"}
             </Button>
           </DialogFooter>
         </DialogContent>

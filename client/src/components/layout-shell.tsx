@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LogOut, Shield, Trash2, Loader2, User as UserIcon, Crown, Sparkles,
   FlaskConical, HelpCircle, Menu, LayoutDashboard, BarChart3, History as HistoryIcon,
-  Sparkle, Users, KeyRound, Bell,
+  Sparkle, Users, Users2, KeyRound, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -84,6 +84,7 @@ const NAV_ITEMS = [
   { href: "/history", label: "History", icon: HistoryIcon },
   { href: "/ai", label: "AI", icon: Sparkle },
   { href: "/referrals", label: "Referrals", icon: Users },
+  { href: "/partners", label: "Streak Partners", icon: Users2 },
 ] as const;
 
 export function LayoutShell({ children }: LayoutShellProps) {
@@ -186,6 +187,12 @@ export function LayoutShell({ children }: LayoutShellProps) {
                 className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 Refer
+              </Link>
+              <Link
+                href="/partners"
+                className="px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Partners
               </Link>
             </nav>
           )}

@@ -5,14 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useOfflineSync } from "@/hooks/use-offline-sync";
 import { isGuestMode } from "@/lib/api";
 
-// Spec section 16's explicit requirements this satisfies:
-//   - "Clearly indicate when the user is offline" — the top banner.
-//   - "Show sync status where useful" — the pending/syncing/failed
-//     counts, and a manual retry for anything that's exhausted its
-//     automatic attempts (see lib/offline-queue.ts's MAX_ATTEMPTS).
-// Not shown in guest mode — guest sessions have no server round-trip at
-// all (everything's already local-only), so there's no queue to report
-// on.
 export function OfflineIndicator() {
   const { isOnline, pendingCount, failedCount, isSyncing, retryAll } = useOfflineSync();
 

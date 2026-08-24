@@ -19,6 +19,17 @@ async function fetchUser(): Promise<AuthUser | null> {
   const response = await apiFetch("/api/auth/user");
 
   if (response.status === 401) {
+    // A 401 while we believe we're in guest mode can only mean the
+    // server-side guest expiry (see require-user.ts) rejected a stale
+    // X-Guest-Started-At timestamp -- clear the local flag/timestamp so
+    // the next "Continue as Guest" click actually starts a fresh
+    // session instead of silently reusing the same expired timestamp
+    // (setGuestMode(true) only stamps a new start time when none is
+    // already present, so a leftover stale one would otherwise block
+    // guest mode from ever working again).
+    if (isGuestMode()) {
+      setGuestMode(false);
+    }
     return null;
   }
   if (!response.ok) {
@@ -47,7 +58,7 @@ async function deleteAccount(): Promise<void> {
     throw new Error(err.message || "Failed to delete account");
   }
   setGuestMode(false);
-  window.location.href = "/";
+  window.location.href = "/home";
 }
 
 async function loginAsGuest(): Promise<AuthUser> {
@@ -117,7 +128,25 @@ async function loginWithEmail(email: string, password: string): Promise<void> {
   setGuestMode(false);
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (!error) return;
+  if (!error) {
+    // Stamp lastLoginAt for the 7-day session-enforcement check in
+    // require-user.ts. Awaited here, before this function returns, so
+    // the mutation's onSuccess (and any redirect that follows it) never
+    // fires before the timestamp is actually set -- see mark-login's own
+    // comment for why it can't just happen lazily on the next
+    // /api/auth/user check instead.
+    //
+    // Best-effort: if this specific call fails (network blip), the sign-in
+    // itself already succeeded and shouldn't be undone over it -- the
+    // person just won't get the 7-day grace period until their next
+    // successful login, rather than being blocked from this one.
+    try {
+      await apiFetch("/api/auth/mark-login", { method: "POST" });
+    } catch (err) {
+      console.error("Failed to mark login timestamp:", err);
+    }
+    return;
+  }
 
   // Give a clearer message than "invalid credentials" if this email is
   // actually registered via Google rather than a wrong password.

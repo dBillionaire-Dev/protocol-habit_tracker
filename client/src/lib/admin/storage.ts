@@ -16,6 +16,7 @@ import {
   type UserStatus,
   type AdminAuditLogEntry,
 } from "shared/schema";
+import type { AdminRole } from "./guard";
 import { eq, and, desc, count, sum, sql, gte, ne, ilike, or, inArray } from "drizzle-orm";
 import { DISPLAY_PRICING } from "@/lib/paystack/plans";
 
@@ -455,4 +456,50 @@ export async function getHabitAnalytics(): Promise<HabitAnalytics> {
     avoidancePercent: totalHabits > 0 ? Math.round((avoidanceCount / totalHabits) * 1000) / 10 : 0,
     usersWithActiveDebtPercent: totalUsers > 0 ? Math.round((usersWithDebt.size / totalUsers) * 1000) / 10 : 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Admin management (Super Admin only)
+// ---------------------------------------------------------------------------
+
+export interface AdminListEntry {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  role: AdminRole;
+  // "env" admins (Super Admin via SUPER_USER_EMAILS) can't be revoked
+  // from this UI -- only show up once they've actually signed in.
+  source: "env" | "database";
+}
+
+export async function listAdmins(): Promise<AdminListEntry[]> {
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      isSuperUser: users.isSuperUser,
+      adminRole: users.adminRole,
+    })
+    .from(users)
+    .where(sql`${users.isSuperUser} = true OR ${users.adminRole} IS NOT NULL`);
+
+  return rows.map((r) => ({
+    id: r.id,
+    email: r.email,
+    firstName: r.firstName,
+    lastName: r.lastName,
+    role: r.isSuperUser ? "super_admin" : "support_admin",
+    source: r.isSuperUser ? "env" : "database",
+  }));
+}
+
+export async function grantSupportAdmin(userId: string): Promise<void> {
+  await db.update(users).set({ adminRole: "support_admin", updatedAt: new Date() }).where(eq(users.id, userId));
+}
+
+export async function revokeSupportAdmin(userId: string): Promise<void> {
+  await db.update(users).set({ adminRole: null, updatedAt: new Date() }).where(eq(users.id, userId));
 }

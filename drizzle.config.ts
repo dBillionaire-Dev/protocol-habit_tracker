@@ -1,4 +1,7 @@
+import { config } from "dotenv";
 import { defineConfig } from "drizzle-kit";
+
+config({ path: "./client/.env" });
 
 // drizzle-kit push/generate need DIRECT_DATABASE_URL (Supabase's Session
 // pooler on port 5432, or the true direct connection) rather than

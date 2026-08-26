@@ -36,12 +36,12 @@ function endpointFor(action: OfflineAction): { url: string; body: unknown } {
     case "complete-daily":
       return {
         url: `/api/habits/${action.habitId}/complete`,
-        body: { date: action.date, completed: true, debtRepayment: action.debtRepayment, clientHour: new Date().getHours() },
+        body: { date: action.date, completedValue: action.completedValue ?? 0, clientHour: new Date().getHours() },
       };
     case "mark-missed":
       return {
         url: `/api/habits/${action.habitId}/complete`,
-        body: { date: action.date, completed: false, clientHour: new Date().getHours() },
+        body: { date: action.date, completedValue: 0, clientHour: new Date().getHours() },
       };
     case "confirm-clean-day":
       return {

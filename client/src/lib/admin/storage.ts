@@ -5,7 +5,6 @@ import {
   habits,
   habitDebts,
   dailyHabitStatus,
-  buildDebtRepayments,
   referrals,
   referralRewards,
   adminAuditLog,
@@ -413,40 +412,25 @@ export async function getHabitAnalytics(): Promise<HabitAnalytics> {
   const totalLoggedDays = completionRows.reduce((total, r) => total + r.count, 0);
 
   // Active debt: avoidance habits with debtCount > 0, plus build habits
-  // where missed days outstrip repayments. See buildDebtRepayments's
-  // comment in shared/schema.ts for the totalMissed - totalRepaid formula
-  // this mirrors exactly.
-  const [avoidanceDebtRows, buildHabitRows, missedByHabit, repaidByHabit] = await Promise.all([
+  // with outstandingDebtUnits > 0 (the persisted running total — see
+  // shared/schema.ts). Simpler than it used to be: this used to replay
+  // missed-days vs a separate repayments ledger; now it's just reading
+  // the one authoritative column directly.
+  const [avoidanceDebtRows, buildDebtRows] = await Promise.all([
     db
       .select({ userId: habits.userId })
       .from(habitDebts)
       .innerJoin(habits, eq(habits.id, habitDebts.habitId))
       .where(sql`${habitDebts.debtCount} > 0`),
-    db.select({ id: habits.id, userId: habits.userId }).from(habits).where(eq(habits.type, "build")),
     db
-      .select({ habitId: dailyHabitStatus.habitId, missed: count() })
-      .from(dailyHabitStatus)
-      .where(eq(dailyHabitStatus.completed, false))
-      .groupBy(dailyHabitStatus.habitId),
-    db
-      .select({
-        habitId: buildDebtRepayments.habitId,
-        repaid: sql<number>`COALESCE(SUM(${buildDebtRepayments.amount}), 0)`.mapWith(Number),
-      })
-      .from(buildDebtRepayments)
-      .groupBy(buildDebtRepayments.habitId),
+      .select({ userId: habits.userId })
+      .from(habits)
+      .where(and(eq(habits.type, "build"), sql`${habits.outstandingDebtUnits} > 0`)),
   ]);
-
-  const missedMap = new Map(missedByHabit.map((r) => [r.habitId, r.missed]));
-  const repaidMap = new Map(repaidByHabit.map((r) => [r.habitId, r.repaid]));
 
   const usersWithDebt = new Set<string>();
   for (const row of avoidanceDebtRows) usersWithDebt.add(row.userId);
-  for (const h of buildHabitRows) {
-    const missed = missedMap.get(h.id) ?? 0;
-    const repaid = repaidMap.get(h.id) ?? 0;
-    if (missed - repaid > 0) usersWithDebt.add(h.userId);
-  }
+  for (const row of buildDebtRows) usersWithDebt.add(row.userId);
 
   return {
     avgHabitsPerUser: totalUsers > 0 ? Math.round((totalHabits / totalUsers) * 10) / 10 : 0,

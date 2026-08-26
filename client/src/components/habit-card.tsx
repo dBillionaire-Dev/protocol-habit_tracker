@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
-import { Check, Plus, Minus, Trash2, Flame, Pencil, UserPlus } from "lucide-react";
+import { Check, Plus, Trash2, Flame, Pencil, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
@@ -36,7 +36,6 @@ import {
   useDeleteHabit,
   useUpdateHabit,
   useMarkMissed,
-  useRepayDebt,
   ApiError,
 } from "@/hooks/use-habits";
 import { useBillingStatus } from "@/hooks/use-billing";
@@ -50,45 +49,6 @@ interface HabitCardProps {
   habit: HabitWithStatus;
 }
 
-// Simple [-] N [+] stepper matching the spec's mockups. Bounded to
-// [1, max] — the "+" button disables itself at max rather than allowing
-// an out-of-range value to ever be selectable.
-function Stepper({
-  value,
-  onChange,
-  max,
-}: {
-  value: number;
-  onChange: (next: number) => void;
-  max: number;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => onChange(Math.max(1, value - 1))}
-        disabled={value <= 1}
-      >
-        <Minus className="w-4 h-4" />
-      </Button>
-      <span className="w-8 text-center font-mono font-bold text-lg">{value}</span>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => onChange(Math.min(max, value + 1))}
-        disabled={value >= max}
-      >
-        <Plus className="w-4 h-4" />
-      </Button>
-    </div>
-  );
-}
-
 export function HabitCard({ habit }: HabitCardProps) {
   const deleteMutation = useDeleteHabit();
   const updateMutation = useUpdateHabit();
@@ -96,7 +56,6 @@ export function HabitCard({ habit }: HabitCardProps) {
   const confirmCleanMutation = useConfirmCleanDay();
   const completeMutation = useCompleteDaily();
   const missedMutation = useMarkMissed();
-  const repayDebtMutation = useRepayDebt();
   const { isWindowOpen } = useConfirmationWindow();
   const { data: billing } = useBillingStatus();
 
@@ -184,46 +143,42 @@ export function HabitCard({ habit }: HabitCardProps) {
     );
   }
 
-  // --- Build-habit debt repayment state ---
+  // --- Build-habit debt display + today's-completion entry ---
+  // remainingDebt is now raw units (e.g. pushups), not whole days — see
+  // shared/schema.ts's outstandingDebtUnits comment for the full model.
   const remainingDebt = habit.remainingDebt ?? 0;
-  const [repayDialogOpen, setRepayDialogOpen] = useState(false);
-  const [repayAmount, setRepayAmount] = useState(1);
-  const [repayError, setRepayError] = useState<string | null>(null);
+  const todayTask = habit.todayTask || habit.baseTaskValue || 0;
 
-  // --- Today's-completion + optional repayment confirmation state ---
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
-  const [repayDuringComplete, setRepayDuringComplete] = useState<"no" | "yes">("no");
-  const [completeRepayAmount, setCompleteRepayAmount] = useState(1);
+  // Controlled as a string so the field can be genuinely empty while
+  // typing (e.g. clearing "120" to type "80") without fighting a
+  // number input's own coercion; parsed back to a number on submit.
+  const [completedValueInput, setCompletedValueInput] = useState(String(todayTask));
   const [completeError, setCompleteError] = useState<string | null>(null);
+  // Extra guard against a typo (e.g. an accidental trailing zero) —
+  // anything entered above todayTask has no effect beyond it (the
+  // surplus is just discarded, there's no "banked credit" for future
+  // days), so it's the one input value that's more likely to be a
+  // mistake than a real number worth acting on without a second look.
+  const [overageConfirmOpen, setOverageConfirmOpen] = useState(false);
 
-  function openRepayDialog() {
-    setRepayAmount(Math.min(1, remainingDebt) || 1);
-    setRepayError(null);
-    setRepayDialogOpen(true);
-  }
-
-  function confirmRepay() {
-    repayDebtMutation.mutate(
-      { id: habit.id, amount: repayAmount },
-      {
-        onSuccess: (data) => {
-          setRepayDialogOpen(false);
-          toast({
-            title: "✓ Debt repayment recorded",
-            description: `${repayAmount} missed day${repayAmount !== 1 ? "s" : ""} repaid. ${data.remainingDebt} day${data.remainingDebt !== 1 ? "s" : ""} remaining.`,
-          });
-        },
-        onError: (err) => setRepayError(err instanceof ApiError ? err.message : "Something went wrong."),
-      },
-    );
-  }
+  const parsedCompletedValue = Number(completedValueInput);
+  const isValidCompletedValue =
+    completedValueInput.trim() !== "" &&
+    Number.isInteger(parsedCompletedValue) &&
+    parsedCompletedValue >= 0;
+  const projectedRemainingDebt = isValidCompletedValue
+    ? Math.max(0, todayTask - parsedCompletedValue)
+    : todayTask;
+  const exceedsTodayTask = isValidCompletedValue && parsedCompletedValue > todayTask;
 
   function openCompleteDialog() {
     if (remainingDebt <= 0) {
-      // No outstanding debt — nothing to ask about, complete immediately
-      // exactly like before this feature existed.
+      // No outstanding debt — nothing to ask about. Complete instantly
+      // at exactly today's own base requirement, same low-friction
+      // single-click flow as before this feature existed.
       completeMutation.mutate(
-        { id: habit.id, date: today, completed: true },
+        { id: habit.id, date: today, completedValue: habit.baseTaskValue || 0 },
         {
           onSuccess: (data) => {
             if ("queuedOffline" in data) {
@@ -234,41 +189,58 @@ export function HabitCard({ habit }: HabitCardProps) {
       );
       return;
     }
-    setRepayDuringComplete("no");
-    setCompleteRepayAmount(1);
+    // Pre-filled to the full catch-up amount (today's own base PLUS all
+    // outstanding debt) -- editable down to whatever was actually done,
+    // e.g. 80 out of 120. Nothing is submitted until they confirm.
+    setCompletedValueInput(String(todayTask));
     setCompleteError(null);
     setCompleteDialogOpen(true);
   }
 
-  function confirmComplete() {
-    const debtRepayment = repayDuringComplete === "yes" ? completeRepayAmount : 0;
+  // What the main dialog's "Confirm" button actually calls. Splits out
+  // from the real submission (submitComplete) so a value over todayTask
+  // routes through one extra "are you sure" step instead of submitting
+  // immediately.
+  function handleConfirmClick() {
+    if (!isValidCompletedValue) {
+      setCompleteError("Enter a whole number of 0 or more.");
+      return;
+    }
+    if (exceedsTodayTask) {
+      setOverageConfirmOpen(true);
+      return;
+    }
+    submitComplete();
+  }
+
+  function submitComplete() {
     completeMutation.mutate(
-      { id: habit.id, date: today, completed: true, debtRepayment },
+      { id: habit.id, date: today, completedValue: parsedCompletedValue },
       {
         onSuccess: (data) => {
+          setOverageConfirmOpen(false);
           setCompleteDialogOpen(false);
           if ("queuedOffline" in data) {
             // Queued locally, not confirmed by the server yet — do NOT
             // read data.debtSummary here, it doesn't exist on this
             // shape. See QueuedLocally in use-habits.ts.
-            toast({
-              title: "Saved offline",
-              description:
-                debtRepayment > 0
-                  ? "This completion and debt repayment will sync automatically once you're back online."
-                  : "This will sync automatically once you're back online.",
-            });
+            toast({ title: "Saved offline", description: "This will sync automatically once you're back online." });
             return;
           }
-          if (debtRepayment > 0) {
-            const remaining = data.debtSummary.remainingDebt;
+          const remaining = data.debtSummary.outstandingDebtUnits;
+          if (remaining > 0) {
             toast({
-              title: "✓ Debt repayment recorded",
-              description: `${debtRepayment} missed day${debtRepayment !== 1 ? "s" : ""} repaid. ${remaining} day${remaining !== 1 ? "s" : ""} remaining.`,
+              title: parsedCompletedValue >= (habit.baseTaskValue || 0) ? "✓ Protocol executed" : "Logged — today's own target wasn't fully met",
+              description: `${remaining} ${habit.unit || "unit"}${remaining !== 1 ? "s" : ""} carried forward to tomorrow.`,
             });
+          } else if (todayTask > (habit.baseTaskValue || 0)) {
+            toast({ title: "✓ Fully caught up", description: "All outstanding debt cleared." });
           }
         },
-        onError: (err) => setCompleteError(err instanceof ApiError ? err.message : "Something went wrong."),
+        onError: (err) => {
+          setOverageConfirmOpen(false);
+          setCompleteError(err instanceof ApiError ? err.message : "Something went wrong.");
+        },
       },
     );
   }
@@ -464,7 +436,7 @@ export function HabitCard({ habit }: HabitCardProps) {
           {remainingDebt > 0 && (
             <div className="flex items-center gap-1">
               <span className="text-3xl font-mono font-bold text-destructive">{remainingDebt}</span>
-              <span className="text-xs text-muted-foreground">day{remainingDebt !== 1 ? "s" : ""} debt</span>
+              <span className="text-xs text-muted-foreground">{habit.unit || "units"} owed</span>
             </div>
           )}
         </CardHeader>
@@ -491,21 +463,6 @@ export function HabitCard({ habit }: HabitCardProps) {
               <p className="text-xs text-orange-500 mt-1">{penaltyText}</p>
             )}
           </div>
-
-          {remainingDebt > 0 && (
-            <div className="pt-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full border-destructive/30 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                onClick={openRepayDialog}
-                disabled={repayDebtMutation.isPending}
-                data-testid={`button-repay-debt-${habit.id}`}
-              >
-                Repay Debt
-              </Button>
-            </div>
-          )}
         </CardContent>
         <CardFooter className="pt-0">
           {habit.todayCompleted ? (
@@ -569,84 +526,48 @@ export function HabitCard({ habit }: HabitCardProps) {
         </CardFooter>
       </Card>
 
-      {/* Standalone debt repayment dialog — independent of today's completion */}
-      <Dialog open={repayDialogOpen} onOpenChange={setRepayDialogOpen}>
+      {/* Today's-completion dialog, shown only when there's outstanding
+          debt. Single input: how much was actually done today, in raw
+          units — e.g. "80" pushups. Pre-filled to the full catch-up
+          amount (todayTask), editable down. Whether today itself counts
+          as done, and how much of the debt clears, are both derived
+          server-side from this one number — see storage.completeDailyTask. */}
+      <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Repay Debt</DialogTitle>
+            <DialogTitle>Execute Protocol</DialogTitle>
             <DialogDescription>
-              You currently have {remainingDebt} day{remainingDebt !== 1 ? "s" : ""} of outstanding debt.
+              You have {remainingDebt} {habit.unit || "units"} of debt piled up. Today's full
+              requirement (today's own {habit.baseTaskValue} {habit.unit} plus what's owed) is{" "}
+              {todayTask} {habit.unit}.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <p className="text-sm font-medium">How many missed days did you repay?</p>
-              <Stepper value={repayAmount} onChange={setRepayAmount} max={remainingDebt} />
+              <Label htmlFor={`completed-value-${habit.id}`}>How much did you actually do today?</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id={`completed-value-${habit.id}`}
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={completedValueInput}
+                  onChange={(e) => setCompletedValueInput(e.target.value)}
+                  className="font-mono"
+                  autoFocus
+                />
+                <span className="text-sm text-muted-foreground shrink-0">{habit.unit || "units"}</span>
+              </div>
             </div>
+
             <p className="text-sm text-muted-foreground">
-              This will reduce your outstanding debt to {Math.max(0, remainingDebt - repayAmount)} day{Math.max(0, remainingDebt - repayAmount) !== 1 ? "s" : ""}.
+              {!isValidCompletedValue
+                ? "Enter a whole number of 0 or more."
+                : projectedRemainingDebt > 0
+                  ? `This leaves ${projectedRemainingDebt} ${habit.unit || "units"} carried forward to tomorrow.`
+                  : "This fully clears your outstanding debt."}
             </p>
-            {repayError && <p className="text-sm text-destructive">{repayError}</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRepayDialogOpen(false)} disabled={repayDebtMutation.isPending}>
-              Cancel
-            </Button>
-            <Button onClick={confirmRepay} disabled={repayDebtMutation.isPending || remainingDebt < 1}>
-              {repayDebtMutation.isPending ? "Recording..." : "Confirm Repayment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Today's-completion dialog, shown only when there's outstanding
-          debt — asks explicitly whether any of it was also repaid today.
-          Completing today's requirement never implicitly repays debt. */}
-      <Dialog open={completeDialogOpen} onOpenChange={setCompleteDialogOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Complete Today's Protocol</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Today's requirement</p>
-              <p className="text-lg font-mono font-bold">{habit.todayTask || habit.baseTaskValue} {habit.unit}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Outstanding debt</p>
-              <p className="text-lg font-mono font-bold text-destructive">{remainingDebt} day{remainingDebt !== 1 ? "s" : ""}</p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Did you repay any missed days today?</p>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={repayDuringComplete === "no" ? "default" : "outline"}
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setRepayDuringComplete("no")}
-                >
-                  No
-                </Button>
-                <Button
-                  type="button"
-                  variant={repayDuringComplete === "yes" ? "default" : "outline"}
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setRepayDuringComplete("yes")}
-                >
-                  Yes
-                </Button>
-              </div>
-            </div>
-
-            {repayDuringComplete === "yes" && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Days repaid</p>
-                <Stepper value={completeRepayAmount} onChange={setCompleteRepayAmount} max={remainingDebt} />
-              </div>
-            )}
 
             {completeError && <p className="text-sm text-destructive">{completeError}</p>}
           </div>
@@ -654,12 +575,39 @@ export function HabitCard({ habit }: HabitCardProps) {
             <Button variant="outline" onClick={() => setCompleteDialogOpen(false)} disabled={completeMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={confirmComplete} disabled={completeMutation.isPending}>
+            <Button onClick={handleConfirmClick} disabled={completeMutation.isPending || !isValidCompletedValue}>
               {completeMutation.isPending ? "Confirming..." : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Extra "are you sure" step, only when the entered value exceeds
+          todayTask — the one input more likely to be a typo (an extra
+          zero, etc.) than a real number worth acting on unconfirmed,
+          since anything beyond todayTask has no effect: it's just
+          discarded, not banked as credit toward future days. */}
+      <AlertDialog open={overageConfirmOpen} onOpenChange={setOverageConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>That's more than was needed — just checking</AlertDialogTitle>
+            <AlertDialogDescription>
+              You entered {parsedCompletedValue} {habit.unit || "units"}, but only {todayTask}{" "}
+              {habit.unit || "units"} was needed to fully clear today's requirement and all
+              outstanding debt. Anything above that isn't banked for future days — it's simply not
+              counted. Is {parsedCompletedValue} correct?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={completeMutation.isPending}>
+              Let me fix it
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={submitComplete} disabled={completeMutation.isPending}>
+              {completeMutation.isPending ? "Confirming..." : "Yes, that's correct"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">

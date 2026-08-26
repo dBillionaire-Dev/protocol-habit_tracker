@@ -21,7 +21,7 @@ export default async function AdminSubscriptionsPage() {
         <StatCard label="Premium Plus (MRR)" value={formatNaira(stats.mrrByPlan.premium_plus)} />
       </div>
 
-      <div className="grid grid-cols-3 gap-4 max-w-lg">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-lg">
         <StatCard label="New Subs (30d)" value={stats.newSubscriptions30d} />
         <StatCard label="Cancellations (30d)" value={stats.cancellations30d} />
         <StatCard label="Failed Payments (30d)" value={stats.failedPayments30d} />

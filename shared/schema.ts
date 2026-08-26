@@ -26,6 +26,16 @@ export const habits = pgTable("habits", {
   type: text("type", { enum: HABIT_TYPES }).notNull(),
   baseTaskValue: integer("base_task_value"), // For build habits
   unit: text("unit"), // reps, minutes, pages, sessions
+  // Build protocols only. Running total of raw units (same unit as
+  // baseTaskValue/unit above) still owed from past missed/under-completed
+  // days — e.g. missing a 30-rep day adds 30 here, not "1 day". Combined
+  // with baseTaskValue to produce todayTask (see getHabits), and reduced
+  // directly by however much of it a person's logged completedValue
+  // covers on top of that day's own base requirement (see
+  // completeDailyTask). Replaces an earlier day-counting debt model
+  // (totalMissedDays/totalRepaidDays via a separate ledger table) that
+  // couldn't represent a partial repayment in actual units at all.
+  outstandingDebtUnits: integer("outstanding_debt_units").default(0).notNull(),
   // Build protocols only (Pro/Premium Plus, "Custom Protocol Rules").
   // Which days of the week this protocol is required: 0=Sunday .. 6=Saturday.
   // null or empty = required every day (the original, default behavior —
@@ -43,12 +53,27 @@ export const habits = pgTable("habits", {
   longestStreakEnd: date("longest_streak_end"), // When longest streak ended (if broken)
 });
 
+// export const habitEvents = pgTable("habit_events", {
+//   id: serial("id").primaryKey(),
+//   habitId: integer("habit_id").notNull().references(() => habits.id),
+//   timestamp: timestamp("timestamp").defaultNow().notNull(),
+//   value: integer("value").default(1).notNull(),
+//   notes: text("notes"),
+// });
+
 export const habitEvents = pgTable("habit_events", {
   id: serial("id").primaryKey(),
   habitId: integer("habit_id").notNull().references(() => habits.id),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
   value: integer("value").default(1).notNull(),
   notes: text("notes"),
+  // Client-generated on every log request (online or offline-queued).
+  // Lets logHabitEvent detect a replay of the exact same action and
+  // no-op it instead of double-counting debt -- see
+  // client/src/lib/offline-queue.ts. Nullable/non-unique-safe for old
+  // rows logged before this existed (Postgres allows multiple NULLs in
+  // a unique column).
+  idempotencyKey: varchar("idempotency_key").unique(),
 });
 
 export const dailyHabitStatus = pgTable("daily_habit_status", {
@@ -57,6 +82,13 @@ export const dailyHabitStatus = pgTable("daily_habit_status", {
   date: date("date").notNull(),
   completed: boolean("completed").default(false).notNull(),
   penaltyLevel: integer("penalty_level").default(0).notNull(),
+  // Raw units actually logged for this day (build habits only) — e.g.
+  // 80 for "80 pushups done". Null for days that predate this column, or
+  // for habits/day-types where it was never applicable. This is the
+  // number a person actually typed in, before it gets split between
+  // "satisfies today's own baseTaskValue" and "reduces
+  // habits.outstandingDebtUnits" — see completeDailyTask.
+  completedValue: integer("completed_value"),
   autoProcessed: boolean("auto_processed").default(false).notNull(), // True if processed by midnight automation
 }, (table) => ({
   habitDateUnique: unique().on(table.habitId, table.date),
@@ -69,14 +101,13 @@ export const habitDebts = pgTable("habit_debts", {
   lastCleanDate: date("last_clean_date"),
 });
 
-// Build-habit debt repayment history. Unlike avoidance's habitDebts (a
-// single mutable counter), Build debt is DERIVED, not stored directly:
-//   totalMissedDays = count of dailyHabitStatus rows where completed = false
-//   totalRepaidDays = sum of this table's `amount` for the habit
-//   remainingDebt   = max(0, totalMissedDays - totalRepaidDays)
-// This keeps the missed-day history (already recorded in dailyHabitStatus)
-// as the single source of truth, and makes repayment an auditable event
-// log rather than a number the frontend could ever set directly.
+// DEPRECATED — superseded by habits.outstandingDebtUnits (a single,
+// directly-updated running total in raw units), which supports partial
+// repayment in actual quantities ("did 80 of the 120 owed") instead of
+// only whole missed-DAYS the way this table's amount/count model did.
+// Left defined (table not dropped) so any historical rows already
+// written aren't orphaned by a migration, but nothing in the app writes
+// to or reads from this anymore.
 export const buildDebtRepayments = pgTable("build_debt_repayments", {
   id: serial("id").primaryKey(),
   habitId: integer("habit_id").notNull().references(() => habits.id),
@@ -89,9 +120,9 @@ export const buildDebtRepayments = pgTable("build_debt_repayments", {
 export type BuildDebtRepayment = typeof buildDebtRepayments.$inferSelect;
 
 // Schemas
-export const insertHabitSchema = createInsertSchema(habits).omit({ 
-  id: true, 
-  userId: true, 
+export const insertHabitSchema = createInsertSchema(habits).omit({
+  id: true,
+  userId: true,
   createdAt: true,
   currentStreak: true,
   longestStreak: true,
@@ -111,9 +142,9 @@ export const insertHabitSchema = createInsertSchema(habits).omit({
     }),
 });
 
-export const insertHabitEventSchema = createInsertSchema(habitEvents).omit({ 
-  id: true, 
-  timestamp: true 
+export const insertHabitEventSchema = createInsertSchema(habitEvents).omit({
+  id: true,
+  timestamp: true
 });
 
 // Editing an existing habit. Deliberately narrower than insertHabitSchema:
@@ -135,8 +166,8 @@ export const updateHabitSchema = z.object({
 });
 export type UpdateHabitRequest = z.infer<typeof updateHabitSchema>;
 
-export const insertDailyStatusSchema = createInsertSchema(dailyHabitStatus).omit({ 
-  id: true 
+export const insertDailyStatusSchema = createInsertSchema(dailyHabitStatus).omit({
+  id: true
 });
 
 // Types
@@ -150,28 +181,36 @@ export type HabitDebt = typeof habitDebts.$inferSelect;
 export type CreateHabitRequest = InsertHabit;
 export type LogEventRequest = { notes?: string };
 export type ConfirmCleanDayRequest = { date: string };
-export type CompleteDailyTaskRequest = { date: string, completed: boolean };
+// completedValue: raw units actually done today (build habits only) —
+// e.g. 80 for "80 pushups". Replaces a separate completed:boolean +
+// debtRepayment?:number pair: whether today counts as done, AND how
+// much of any outstanding debt gets cleared, are both derived from this
+// single number server-side (see completeDailyTask) rather than being
+// two things the client has to separately decide and agree with each
+// other on.
+export type CompleteDailyTaskRequest = { date: string; completedValue: number };
 
 export type HabitWithStatus = Habit & {
   debt?: number; // For avoidance
   todayEvents?: number; // For avoidance - events logged today
   todayConfirmed?: boolean; // For avoidance - clean day confirmed today
-  todayTask?: number; // For build - required task amount
+  todayTask?: number; // For build - required task amount = baseTaskValue + outstandingDebtUnits
   todayCompleted?: boolean; // For build
   todayIsRestDay?: boolean; // For build - today isn't a scheduled day, no action needed
   todayMissed?: boolean; // For build - marked as missed
-  penaltyLevel?: number; // For build - stacking requirement multiplier, NOT debt
-  // For build - missed-day debt, independent of penaltyLevel. See
-  // buildDebtRepayments above for how these are derived.
-  totalMissedDays?: number;
-  totalRepaidDays?: number;
+  // For build - display-only estimate of "how many days' worth" the
+  // current outstandingDebtUnits represents (outstandingDebtUnits /
+  // baseTaskValue, rounded up). NOT used in any actual math — todayTask
+  // uses the precise outstandingDebtUnits directly — this exists purely
+  // for copy like "penalty stacked from N days missed".
+  penaltyLevel?: number;
+  // For build - raw units of outstanding debt (same unit as
+  // baseTaskValue/unit), mirrors habits.outstandingDebtUnits directly.
   remainingDebt?: number;
 };
 
 export type BuildDebtSummary = {
-  totalMissedDays: number;
-  totalRepaidDays: number;
-  remainingDebt: number;
+  outstandingDebtUnits: number;
 };
 
 // --- Custom Protocol Rules: day-of-week scheduling (Build only) ---

@@ -39,7 +39,7 @@ export default function AdminSupportPage() {
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-xl font-bold tracking-tight">Support</h1>
 
-      <div className="grid grid-cols-3 gap-4 max-w-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-sm">
         <StatCard label="Open" value={data?.counts.open ?? "\u2014"} />
         <StatCard label="Pending" value={data?.counts.pending ?? "\u2014"} />
         <StatCard label="Resolved" value={data?.counts.resolved ?? "\u2014"} />

@@ -110,10 +110,7 @@ export interface IStorage {
   
   // Build
   getDailyStatus(habitId: number, date: string): Promise<DailyHabitStatus | undefined>;
-  completeDailyTask(habitId: number, date: string, completed: boolean, debtRepayment?: number): Promise<DailyHabitStatus & { debtSummary: BuildDebtSummary }>;
-  calculatePenaltyLevel(habitId: number, date: string): Promise<number>;
-  getBuildDebtSummary(habitId: number): Promise<BuildDebtSummary>;
-  repayBuildDebt(habitId: number, userId: string, amount: number, date: string): Promise<BuildDebtSummary>;
+  completeDailyTask(habitId: number, date: string, completedValue: number): Promise<DailyHabitStatus & { debtSummary: BuildDebtSummary }>;
   
   // Streaks
   updateStreak(habitId: number, date: string, isSuccess: boolean): Promise<void>;
@@ -762,21 +759,23 @@ export class DatabaseStorage implements IStorage {
         h.todayEvents = await this.getTodayEventCount(habit.id, today);
         h.todayConfirmed = debt?.lastCleanDate === today;
       } else {
-        // Build habit logic
+        // Build habit logic. outstandingDebtUnits is the single source of
+        // truth for debt now (see shared/schema.ts) -- no separate
+        // scan/derivation needed the way the old day-counting model
+        // required.
         h.todayIsRestDay = !isScheduledDay(habit.scheduledDays, today);
-        const penalty = await this.calculatePenaltyLevel(habit.id, today);
-        h.penaltyLevel = penalty;
-        h.todayTask = (habit.baseTaskValue || 0) + ((habit.baseTaskValue || 0) * penalty);
-        
+        const outstandingDebtUnits = habit.outstandingDebtUnits ?? 0;
+        const base = habit.baseTaskValue || 0;
+        h.todayTask = base + outstandingDebtUnits;
+        h.remainingDebt = outstandingDebtUnits;
+        // Display-only estimate ("penalty stacked from N days missed") --
+        // see HabitWithStatus's comment. Never used for todayTask itself.
+        h.penaltyLevel = base > 0 ? Math.ceil(outstandingDebtUnits / base) : 0;
+
         const status = await this.getDailyStatus(habit.id, today);
         h.todayCompleted = status?.completed ?? false;
         // Check if marked as missed (has status record but not completed)
         h.todayMissed = status ? !status.completed : false;
-
-        const debtSummary = await this.getBuildDebtSummary(habit.id);
-        h.totalMissedDays = debtSummary.totalMissedDays;
-        h.totalRepaidDays = debtSummary.totalRepaidDays;
-        h.remainingDebt = debtSummary.remainingDebt;
       }
       results.push(h);
     }
@@ -898,96 +897,122 @@ export class DatabaseStorage implements IStorage {
     return status;
   }
 
+  // Fills in any FULLY UNTOUCHED scheduled days between the last
+  // recorded dailyHabitStatus row (or habit creation, if none) and
+  // asOfDate, adding baseTaskValue per such day to outstandingDebtUnits.
+  // This is what makes "I just didn't open the app for 3 days" accrue
+  // debt automatically, same as the old gap-scanning calculatePenaltyLevel
+  // did for display purposes -- except now it's actually persisted, so a
+  // later partial repayment has something concrete to reduce.
+  //
+  // A day that WAS explicitly touched (completed OR marked missed) is
+  // never re-counted here, even if it fell short of baseTaskValue --
+  // only the true gaps (no row at all) get caught up by this. Meeting
+  // baseTaskValue exactly resets the reference point for future gap
+  // scans (see the dailyHabitStatus.completed check below); a day that
+  // was touched but fell short does not, so debt keeps compounding from
+  // the last TRUE full day the same way the old model's penalty stack did.
+  //
+  // asOfDate itself is never included (countScheduledDaysBetween is
+  // exclusive on both ends) -- today's own requirement is handled
+  // separately via todayTask, never folded into "debt" until the day
+  // has actually passed unresolved.
+  private async catchUpMissedDaysInTx(
+    tx: DbOrTx,
+    habitId: number,
+    asOfDate: string,
+  ): Promise<number> {
+    const [habit] = await tx.select().from(habits).where(eq(habits.id, habitId));
+    if (!habit || habit.type !== "build") return habit?.outstandingDebtUnits ?? 0;
+
+    const [lastRow] = await tx
+      .select({ date: dailyHabitStatus.date, completed: dailyHabitStatus.completed })
+      .from(dailyHabitStatus)
+      .where(and(eq(dailyHabitStatus.habitId, habitId), eq(dailyHabitStatus.completed, true)))
+      .orderBy(desc(dailyHabitStatus.date))
+      .limit(1);
+
+    const createdDateStr = new Date(habit.createdAt).toISOString().split("T")[0];
+    const fromDate = lastRow?.date ?? createdDateStr;
+
+    const gapDays = countScheduledDaysBetween(habit.scheduledDays, fromDate, asOfDate);
+    if (gapDays <= 0) return habit.outstandingDebtUnits;
+
+    const addedDebt = gapDays * (habit.baseTaskValue || 0);
+    const [updated] = await tx
+      .update(habits)
+      .set({ outstandingDebtUnits: habit.outstandingDebtUnits + addedDebt })
+      .where(eq(habits.id, habitId))
+      .returning({ outstandingDebtUnits: habits.outstandingDebtUnits });
+    return updated.outstandingDebtUnits;
+  }
+
+  // Read-path wrapper for getHabits -- same row-lock as the write path,
+  // since two people (or two tabs) computing this concurrently could
+  // otherwise both see the same gap and double-add it.
+  private async catchUpMissedDays(habitId: number, asOfDate: string): Promise<number> {
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT id FROM habits WHERE id = ${habitId} FOR UPDATE`);
+      return this.catchUpMissedDaysInTx(tx, habitId, asOfDate);
+    });
+  }
+
+  // completedValue: raw units actually logged today (e.g. 80 pushups).
+  // Both "does today count as done" AND "how much outstanding debt gets
+  // cleared" are derived from this single number:
+  //   todayTask = baseTaskValue + outstandingDebtUnits (after catch-up)
+  //   isCompleted = completedValue >= baseTaskValue -- met TODAY's own
+  //     ask, regardless of whether old debt is fully cleared too
+  //   newDebt = max(0, todayTask - completedValue) -- whatever's left
+  //     after today's entry covers as much of (today's base + old debt)
+  //     as it reaches, carries forward to tomorrow
+  //
+  // Example matching the spec: base=30, 3 prior missed days already
+  // accrued as outstandingDebtUnits=90 (via catch-up above) ->
+  // todayTask=120. Enter completedValue=80 -> isCompleted=true (80>=30),
+  // newDebt=max(0,120-80)=40, carried into tomorrow's todayTask (30+40=70).
   async completeDailyTask(
     habitId: number,
     date: string,
-    completed: boolean,
-    debtRepayment?: number,
+    completedValue: number,
   ): Promise<DailyHabitStatus & { debtSummary: BuildDebtSummary }> {
-    const penaltyLevel = await this.calculatePenaltyLevel(habitId, date);
+    if (!Number.isInteger(completedValue) || completedValue < 0) {
+      throw new DebtRepaymentError("Amount completed must be a whole number of 0 or more.");
+    }
 
     return db.transaction(async (tx) => {
-      // Lock the habit row so a concurrent repayment (standalone or via
-      // another completion call) can't race this one — see
-      // repayBuildDebtInTx for why this matters.
+      // Lock the habit row for the whole operation -- catch-up and the
+      // debt write below both read-then-write outstandingDebtUnits, and
+      // a concurrent call for the same habit must not interleave with it.
       await tx.execute(sql`SELECT id FROM habits WHERE id = ${habitId} FOR UPDATE`);
 
-      const existing = await this.getDailyStatus(habitId, date);
+      const debtBeforeToday = await this.catchUpMissedDaysInTx(tx, habitId, date);
+      const [habit] = await tx.select().from(habits).where(eq(habits.id, habitId));
+      const base = habit?.baseTaskValue || 0;
+      const todayTask = base + debtBeforeToday;
+      const isCompleted = completedValue >= base;
+      const newDebt = Math.max(0, todayTask - completedValue);
 
+      const existing = await this.getDailyStatus(habitId, date);
       let status: DailyHabitStatus;
       if (existing) {
         const [updated] = await tx.update(dailyHabitStatus)
-          .set({ completed, penaltyLevel })
+          .set({ completed: isCompleted, completedValue })
           .where(and(eq(dailyHabitStatus.habitId, habitId), eq(dailyHabitStatus.date, date)))
           .returning();
         status = updated;
       } else {
         const [inserted] = await tx.insert(dailyHabitStatus)
-          .values({ habitId, date, completed, penaltyLevel })
+          .values({ habitId, date, completed: isCompleted, completedValue })
           .returning();
         status = inserted;
       }
 
-      await this.updateStreakInTx(tx, habitId, date, completed);
+      await tx.update(habits).set({ outstandingDebtUnits: newDebt }).where(eq(habits.id, habitId));
+      await this.updateStreakInTx(tx, habitId, date, isCompleted);
 
-      // Completing today's requirement does NOT implicitly repay debt —
-      // that's a separate, explicit choice (see repayBuildDebtInTx).
-      // Only record a repayment here if the caller actually asked for one.
-      const habit = await this.getHabit(habitId);
-      let debtSummary: BuildDebtSummary;
-      if (debtRepayment && debtRepayment > 0 && habit) {
-        debtSummary = await this.repayBuildDebtInTx(tx, habitId, habit.userId, debtRepayment, date);
-      } else {
-        debtSummary = await this.getBuildDebtSummaryInTx(tx, habitId);
-      }
-
-      return { ...status, debtSummary };
+      return { ...status, debtSummary: { outstandingDebtUnits: newDebt } };
     });
-  }
-
-  async calculatePenaltyLevel(habitId: number, today: string): Promise<number> {
-    const habit = await this.getHabit(habitId);
-    if (!habit) return 0;
-    
-    // Check if habit was created today - no penalty on creation day
-    const createdDate = new Date(habit.createdAt).toISOString().split('T')[0];
-    if (createdDate === today) {
-      return 0;
-    }
-
-    // Today isn't even a required day for this schedule — no penalty,
-    // no requirement (see HabitCard's "rest day" state).
-    if (!isScheduledDay(habit.scheduledDays, today)) {
-      return 0;
-    }
-    
-    // Get last completed status before today
-    const [lastCompleted] = await db.select()
-      .from(dailyHabitStatus)
-      .where(and(
-        eq(dailyHabitStatus.habitId, habitId),
-        eq(dailyHabitStatus.completed, true),
-        sql`date < ${today}`
-      ))
-      .orderBy(desc(dailyHabitStatus.date))
-      .limit(1);
-
-    if (lastCompleted) {
-      // Count only SCHEDULED days missed since the last completion — a
-      // rest day (per the habit's custom schedule) was never required,
-      // so it can't count against the penalty stack. For a habit with
-      // no custom schedule (every day required, the default), this is
-      // mathematically identical to the original plain calendar-day
-      // count — verified directly against the pre-scheduling formula.
-      return countScheduledDaysBetween(habit.scheduledDays, lastCompleted.date, today);
-    } else {
-      // Never completed - count scheduled days since creation
-      // (exclusive of creation day, inclusive of today).
-      const tomorrow = new Date(`${today}T00:00:00Z`);
-      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().split('T')[0];
-      return countScheduledDaysBetween(habit.scheduledDays, createdDate, tomorrowStr);
-    }
   }
 
   async updateStreak(habitId: number, date: string, isSuccess: boolean): Promise<void> {
@@ -1052,81 +1077,6 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  // Build debt: derived from real history (dailyHabitStatus + repayments),
-  // never a directly-settable number. See buildDebtRepayments in
-  // shared/schema.ts for why.
-  async getBuildDebtSummary(habitId: number): Promise<BuildDebtSummary> {
-    return this.getBuildDebtSummaryInTx(db, habitId);
-  }
-
-  private async getBuildDebtSummaryInTx(tx: DbOrTx, habitId: number): Promise<BuildDebtSummary> {
-    const [missedResult] = await tx
-      .select({ count: count() })
-      .from(dailyHabitStatus)
-      .where(and(eq(dailyHabitStatus.habitId, habitId), eq(dailyHabitStatus.completed, false)));
-    const totalMissedDays = missedResult?.count ?? 0;
-
-    const [repaidResult] = await tx
-      .select({ total: sql<number>`COALESCE(SUM(${buildDebtRepayments.amount}), 0)` })
-      .from(buildDebtRepayments)
-      .where(eq(buildDebtRepayments.habitId, habitId));
-    const totalRepaidDays = Number(repaidResult?.total ?? 0);
-
-    return {
-      totalMissedDays,
-      totalRepaidDays,
-      remainingDebt: Math.max(0, totalMissedDays - totalRepaidDays),
-    };
-  }
-
-  async repayBuildDebt(
-    habitId: number,
-    userId: string,
-    amount: number,
-    date: string,
-  ): Promise<BuildDebtSummary> {
-    return db.transaction(async (tx) => {
-      // Row-locks the habit for the duration of this transaction, so a
-      // second concurrent repayment (standalone, or via completeDailyTask)
-      // for the SAME habit has to wait for this one to commit before it
-      // reads outstanding debt — otherwise two simultaneous requests could
-      // both read "1 remaining" and both successfully repay 1, silently
-      // over-repaying. Postgres blocks the second FOR UPDATE until the
-      // first transaction ends, so by the time it proceeds it sees the
-      // up-to-date remaining debt.
-      await tx.execute(sql`SELECT id FROM habits WHERE id = ${habitId} FOR UPDATE`);
-      return this.repayBuildDebtInTx(tx, habitId, userId, amount, date);
-    });
-  }
-
-  private async repayBuildDebtInTx(
-    tx: DbOrTx,
-    habitId: number,
-    userId: string,
-    amount: number,
-    date: string,
-  ): Promise<BuildDebtSummary> {
-    if (!Number.isInteger(amount) || amount < 1) {
-      throw new DebtRepaymentError("Repayment amount must be a whole number of at least 1.");
-    }
-
-    const summary = await this.getBuildDebtSummaryInTx(tx, habitId);
-    if (amount > summary.remainingDebt) {
-      throw new DebtRepaymentError(
-        summary.remainingDebt === 0
-          ? "You have no outstanding debt to repay."
-          : `Repayment amount cannot exceed your outstanding debt of ${summary.remainingDebt}.`,
-      );
-    }
-
-    await tx.insert(buildDebtRepayments).values({ habitId, userId, amount, date });
-
-    return {
-      totalMissedDays: summary.totalMissedDays,
-      totalRepaidDays: summary.totalRepaidDays + amount,
-      remainingDebt: summary.remainingDebt - amount,
-    };
-  }
 }
 
 export const storage = new DatabaseStorage();

@@ -16,8 +16,6 @@ export interface QueuedLocally {
   queuedOffline: true;
 }
 
-function getRepayDebtUrl(id: number): string { return `/api/habits/${id}/repay-debt`; }
-
 function getDeleteUrl(id: number): string { return `/api/habits/${id}`; }
 function getUpdateUrl(id: number): string { return `/api/habits/${id}`; }
 function getLogEventUrl(id: number): string { return `/api/habits/${id}/events`; }
@@ -180,17 +178,15 @@ export function useCompleteDaily() {
     mutationFn: async ({
       id,
       date,
-      completed,
-      debtRepayment,
+      completedValue,
     }: {
       id: number;
       date: string;
-      completed: boolean;
-      debtRepayment?: number;
+      completedValue: number;
     }) => {
       if (isGuestMode()) {
         try {
-          return guestStorage.completeDailyTask(id, date, completed, debtRepayment);
+          return guestStorage.completeDailyTask(id, date, completedValue);
         } catch (err) {
           if (err instanceof GuestDebtRepaymentError) {
             throw new ApiError(err.message, 400, "DEBT_REPAYMENT_INVALID");
@@ -202,17 +198,13 @@ export function useCompleteDaily() {
       // Offline: queue rather than fail outright. Safe to queue —
       // storage.completeDailyTask UPSERTs on (habitId, date), so
       // replaying it is idempotent even if the same day somehow also
-      // got confirmed another way before this synced. A queued debt
-      // repayment amount CAN legitimately be rejected on sync if the
-      // remaining debt has since changed (e.g. from another synced
-      // action) — that surfaces as a normal "failed, tap to retry" item
-      // via useOfflineSync's drain(), not a silent bug.
+      // got confirmed another way before this synced.
       if (typeof navigator !== "undefined" && !navigator.onLine) {
         enqueueOfflineAction({
           type: "complete-daily",
           habitId: id,
           date,
-          debtRepayment,
+          completedValue,
         });
         return { queuedOffline: true } as QueuedLocally;
       }
@@ -223,7 +215,7 @@ export function useCompleteDaily() {
         // comment in useConfirmCleanDay above — the server enforces the
         // 9PM-midnight window using the browser's own local hour, since
         // no per-user timezone is stored anywhere in this app.
-        body: JSON.stringify({ date, completed, debtRepayment, clientHour: new Date().getHours() }),
+        body: JSON.stringify({ date, completedValue, clientHour: new Date().getHours() }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -271,46 +263,13 @@ export function useUpdateHabit() {
   });
 }
 
-// POST /api/habits/:id/repay-debt — repay outstanding Build debt
-// independently of completing today's requirement.
-export function useRepayDebt() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, amount }: { id: number; amount: number }) => {
-      if (isGuestMode()) {
-        try {
-          return guestStorage.repayDebt(id, amount);
-        } catch (err) {
-          if (err instanceof GuestDebtRepaymentError) {
-            throw new ApiError(err.message, 400, "DEBT_REPAYMENT_INVALID");
-          }
-          throw err;
-        }
-      }
-
-      const res = await apiFetch(getRepayDebtUrl(id), {
-        method: "POST",
-        body: JSON.stringify({ amount }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new ApiError(body.message || "Failed to record repayment", res.status);
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
-    },
-  });
-}
-
 // POST /api/habits/:id/complete (mark as missed)
 export function useMarkMissed() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, date }: { id: number; date: string }) => {
       if (isGuestMode()) {
-        return guestStorage.completeDailyTask(id, date, false);
+        return guestStorage.completeDailyTask(id, date, 0);
       }
 
       // Offline: see the identical comment in useCompleteDaily above —
@@ -322,7 +281,7 @@ export function useMarkMissed() {
 
       const res = await apiFetch(getCompleteDailyUrl(id), {
         method: "POST",
-        body: JSON.stringify({ date, completed: false, clientHour: new Date().getHours() }),
+        body: JSON.stringify({ date, completedValue: 0, clientHour: new Date().getHours() }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));

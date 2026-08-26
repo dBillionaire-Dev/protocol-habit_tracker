@@ -24,8 +24,8 @@ export default async function AdminHabitAnalyticsPage() {
 
       <p className="text-xs text-muted-foreground max-w-lg">
         Aggregate only -- this never shows individual habit names, notes, or history. "Active debt" counts a user
-        if either an avoidance habit has <code>debtCount &gt; 0</code>, or a build habit's missed days exceed its
-        logged repayments (see <code>buildDebtRepayments</code> in <code>shared/schema.ts</code>).
+        if either an avoidance habit has <code>debtCount &gt; 0</code>, or a build habit's
+        <code>outstandingDebtUnits &gt; 0</code> (see <code>shared/schema.ts</code>).
       </p>
     </div>
   );

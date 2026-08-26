@@ -69,17 +69,18 @@ export function useInvitePartner() {
 export function useAcceptPartnership() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, habitId }: { id: number; habitId: number }) => {
-      const res = await apiFetch(`/api/partnerships/${id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ habitId }),
-      });
+    mutationFn: async (id: number) => {
+      const res = await apiFetch(`/api/partnerships/${id}/accept`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new PartnershipApiError(data.message || "Failed to accept invite");
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/partnerships"] });
+      // Accepting auto-creates a new habit for this user (see
+      // storage.acceptPartnership) — their dashboard's habit list needs
+      // to pick that up too, not just the partnerships list.
+      queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
     },
   });
 }

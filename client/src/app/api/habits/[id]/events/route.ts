@@ -3,7 +3,7 @@ import { storage } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/require-user";
 import { z } from "zod";
 
-const input = z.object({ notes: z.string().optional() });
+const input = z.object({ notes: z.string().optional(), idempotencyKey: z.string().optional() });
 
 export async function POST(
   request: NextRequest,
@@ -22,7 +22,7 @@ export async function POST(
 
   try {
     const body = input.parse(await request.json().catch(() => ({})));
-    const event = await storage.logHabitEvent(Number(id), body.notes);
+    const event = await storage.logHabitEvent(Number(id), body.notes, body.idempotencyKey);
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
     console.error("Error logging event:", error);

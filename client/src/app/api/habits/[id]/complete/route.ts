@@ -12,12 +12,11 @@ import { z } from "zod";
 // security boundary: nothing sensitive is gated by this check.
 const input = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  completed: z.boolean(),
-  // Optional: repay some outstanding Build debt as part of the same
-  // confirmation. Completing today's requirement does NOT implicitly
-  // repay debt — this must be an explicit, separate choice (see
-  // storage.completeDailyTask).
-  debtRepayment: z.number().int().min(0).optional(),
+  // Raw units actually done today (e.g. 80 for "80 pushups"). Also used
+  // for the "Missed" action, which sends 0. Both whether today counts as
+  // complete AND how much outstanding debt this clears are derived from
+  // this single number server-side — see storage.completeDailyTask.
+  completedValue: z.number().int().min(0),
   clientHour: z.number().int().min(0).max(23),
 });
 
@@ -38,6 +37,12 @@ export async function POST(
   const habit = await storage.getHabit(Number(id));
   if (!habit || habit.userId !== user.id) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  if (habit.type !== "build") {
+    return NextResponse.json(
+      { message: "This confirmation flow is only for Build protocols." },
+      { status: 400 },
+    );
   }
 
   let body: z.infer<typeof input>;
@@ -69,12 +74,7 @@ export async function POST(
   }
 
   try {
-    const result = await storage.completeDailyTask(
-      Number(id),
-      body.date,
-      body.completed,
-      body.debtRepayment,
-    );
+    const result = await storage.completeDailyTask(Number(id), body.date, body.completedValue);
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof DebtRepaymentError) {

@@ -37,8 +37,10 @@ export interface OfflineAction {
   type: OfflineActionType;
   habitId: number;
   date: string;
-  // Only complete-daily uses this (debtRepayment is optional there).
-  debtRepayment?: number;
+  // complete-daily only -- raw units actually done that day. Not present
+  // for mark-missed (which always means 0) or confirm-clean-day
+  // (avoidance habits don't have this concept at all).
+  completedValue?: number;
   createdAt: string;
   attempts: number;
   status: "pending" | "syncing" | "failed";

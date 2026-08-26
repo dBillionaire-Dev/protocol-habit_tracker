@@ -27,12 +27,7 @@ export interface AnalyticsSummary {
 // Shared between the server-only history engine (lib/history.ts) and
 // client hooks — kept import-safe (no `db` dependency) for the same
 // reason as the analytics types above.
-
-// "repayment" covers a standalone Build-debt repayment recorded on a date
-// that otherwise has no dailyHabitStatus row (e.g. today's protocol hasn't
-// been confirmed yet, but the user still repaid an old missed day). See
-// buildHistoryEntries in lib/history.ts.
-export type HistoryStatus = "completed" | "missed" | "clean" | "violation" | "repayment";
+export type HistoryStatus = "completed" | "missed" | "clean" | "violation";
 
 export interface HistoryEntry {
   date: string; // YYYY-MM-DD
@@ -51,20 +46,29 @@ export interface HistoryEntry {
   // log of every past confirmation, so a per-day streak can't be
   // reconstructed honestly. Showing null here beats fabricating a number.
   streak: number | null;
-  // Build: dailyHabitStatus.penaltyLevel for that day (exact, stored).
+  // Build: units of debt outstanding BEFORE this day's entry was applied
+  // (i.e. what was owed going in) — replayed chronologically from
+  // dailyHabitStatus.completedValue, same rules as
+  // storage.completeDailyTask. Not stored directly; there's no per-day
+  // debt snapshot table, so this is reconstructed by walking the
+  // habit's full history in order every time (same approach the old
+  // day-counting model used, just replaying units instead of days).
   // Avoidance: count of violation events logged on that specific date
   // (exact, derived from timestamped events) — not a running debt total,
   // since avoid's debt decrements aren't individually logged historically
   // (only the current count persists), so a historical running total
   // can't be reconstructed honestly either.
   penaltyInfo: number | null;
-  // Build only: whole days of Build debt repaid on this date (from
-  // build_debt_repayments), or null if none was recorded that day.
-  // Avoidance: always null — see buildDebtRepayments in shared/schema.ts.
+  // Build only: raw units actually logged that day (e.g. 80 for "80
+  // pushups"), i.e. dailyHabitStatus.completedValue. Null for days
+  // predating this column, or days with no row at all.
+  completedValue: number | null;
+  // Build only: units of debt cleared by this day's entry — whatever
+  // completedValue covered beyond that day's own baseTaskValue, capped
+  // at how much debt actually existed. Null if none was cleared that day.
   debtRepaid: number | null;
-  // Build only: outstanding Build debt immediately after this entry,
-  // replayed chronologically (max(0, missed-to-date - repaid-to-date)).
-  // Avoidance: always null.
+  // Build only: outstanding Build debt (in raw units) immediately after
+  // this entry, replayed chronologically. Avoidance: always null.
   remainingDebtAfter: number | null;
 }
 

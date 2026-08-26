@@ -5,6 +5,7 @@ import type {
   InsertHabit,
   HabitEvent,
   HabitType,
+  DailyHabitStatus,
 } from "shared/schema";
 import { isScheduledDay, previousScheduledDate, countScheduledDaysBetween, FREE_PLAN_HABIT_EDIT_WINDOW_MS } from "shared/schema";
 import { GUEST_STARTED_AT_KEY, GUEST_SESSION_MAX_AGE_MS } from "@/lib/api";
@@ -44,6 +45,7 @@ interface GuestDailyStatus {
   date: string;
   completed: boolean;
   penaltyLevel: number;
+  completedValue?: number; // mirrors dailyHabitStatus.completedValue server-side
 }
 
 interface GuestHabit {
@@ -66,7 +68,11 @@ interface GuestHabit {
   dailyStatuses: GuestDailyStatus[]; // daily_habit_status
   debtCount: number; // habit_debts.debt_count (avoidance only)
   lastCleanDate: string | null; // habit_debts.last_clean_date (avoidance only)
-  debtRepayments: { amount: number; date: string }[]; // build_debt_repayments (build only)
+  // Build only. Mirrors habits.outstandingDebtUnits server-side -- a
+  // single running total in raw units, not a day count. Replaces an
+  // earlier debtRepayments log the same way the server-side rewrite
+  // replaced buildDebtRepayments (see shared/schema.ts).
+  outstandingDebtUnits: number;
 }
 
 function todayStr(): string {
@@ -117,25 +123,25 @@ function getDailyStatus(
   return habit.dailyStatuses.find((s) => s.date === date);
 }
 
-// Same rules as DatabaseStorage.calculatePenaltyLevel
-function calculatePenaltyLevel(habit: GuestHabit, today: string): number {
-  const createdDate = habit.createdAt.split("T")[0];
-  if (createdDate === today) return 0;
-  if (!isScheduledDay(habit.scheduledDays, today)) return 0;
+// Same rules as DatabaseStorage.catchUpMissedDaysInTx, but PURE (does not
+// mutate habit.outstandingDebtUnits) -- guest getHabits() never calls
+// save() after mapping over habits, so a mutating version here would
+// have its effect silently discarded on every single read. The write
+// path (completeDailyTask below) is what actually applies and persists
+// this via save().
+function computeEffectiveDebt(habit: GuestHabit, asOfDate: string): number {
+  if (habit.type !== "build") return habit.outstandingDebtUnits;
 
   const completedBefore = habit.dailyStatuses
-    .filter((s) => s.completed && s.date < today)
+    .filter((s) => s.completed)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const lastCompleted = completedBefore[0];
+  const createdDate = habit.createdAt.split("T")[0];
+  const fromDate = completedBefore[0]?.date ?? createdDate;
 
-  if (lastCompleted) {
-    return countScheduledDaysBetween(habit.scheduledDays, lastCompleted.date, today);
-  }
+  const gapDays = countScheduledDaysBetween(habit.scheduledDays, fromDate, asOfDate);
+  if (gapDays <= 0) return habit.outstandingDebtUnits;
 
-  const tomorrow = new Date(`${today}T00:00:00Z`);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split("T")[0];
-  return countScheduledDaysBetween(habit.scheduledDays, createdDate, tomorrowStr);
+  return habit.outstandingDebtUnits + gapDays * (habit.baseTaskValue || 0);
 }
 
 // Same rules as DatabaseStorage.updateStreak
@@ -171,21 +177,6 @@ function updateStreak(habit: GuestHabit, date: string, isSuccess: boolean) {
   }
 }
 
-// Same rules as DatabaseStorage.getBuildDebtSummary: derived from real
-// history, never a directly-settable number.
-function getBuildDebtSummary(habit: GuestHabit): {
-  totalMissedDays: number;
-  totalRepaidDays: number;
-  remainingDebt: number;
-} {
-  const totalMissedDays = habit.dailyStatuses.filter((s) => !s.completed).length;
-  const totalRepaidDays = habit.debtRepayments.reduce((sum, r) => sum + r.amount, 0);
-  return {
-    totalMissedDays,
-    totalRepaidDays,
-    remainingDebt: Math.max(0, totalMissedDays - totalRepaidDays),
-  };
-}
 
 function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
   const {
@@ -208,19 +199,17 @@ function toHabitWithStatus(habit: GuestHabit, today: string): HabitWithStatus {
     };
   }
 
-  const penaltyLevel = calculatePenaltyLevel(habit, today);
+  const effectiveDebt = computeEffectiveDebt(habit, today);
+  const base_ = habit.baseTaskValue || 0;
   const status = getDailyStatus(habit, today);
-  const debtSummary = getBuildDebtSummary(habit);
   return {
     ...withDate,
-    penaltyLevel,
-    todayTask: (habit.baseTaskValue || 0) + (habit.baseTaskValue || 0) * penaltyLevel,
+    penaltyLevel: base_ > 0 ? Math.ceil(effectiveDebt / base_) : 0,
+    todayTask: base_ + effectiveDebt,
     todayCompleted: status?.completed ?? false,
     todayMissed: status ? !status.completed : false,
     todayIsRestDay: !isScheduledDay(habit.scheduledDays, today),
-    totalMissedDays: debtSummary.totalMissedDays,
-    totalRepaidDays: debtSummary.totalRepaidDays,
-    remainingDebt: debtSummary.remainingDebt,
+    remainingDebt: effectiveDebt,
   };
 }
 
@@ -264,7 +253,7 @@ export const guestStorage = {
       dailyStatuses: [],
       debtCount: 0,
       lastCleanDate: null,
-      debtRepayments: [],
+      outstandingDebtUnits: 0,
     };
     habits.push(habit);
     save(habits);
@@ -334,69 +323,51 @@ export const guestStorage = {
     return { debt: habit.debtCount };
   },
 
+  // completedValue: raw units actually done today. Both whether today
+  // counts as complete AND how much outstanding debt clears are derived
+  // from this single number -- see DatabaseStorage.completeDailyTask for
+  // the full explanation, mirrored here exactly.
   completeDailyTask(
     id: number,
     date: string,
-    completed: boolean,
-    debtRepayment?: number,
-  ): { completed: boolean; penaltyLevel: number; debtSummary: ReturnType<typeof getBuildDebtSummary> } {
+    completedValue: number,
+  ): DailyHabitStatus & { debtSummary: { outstandingDebtUnits: number } } {
+    if (!Number.isInteger(completedValue) || completedValue < 0) {
+      throw new GuestDebtRepaymentError("Amount completed must be a whole number of 0 or more.");
+    }
+
     const habits = load();
     const habit = habits.find((h) => h.id === id);
     if (!habit) throw new Error("Habit not found");
 
-    const penaltyLevel = calculatePenaltyLevel(habit, date);
+    const debtBeforeToday = computeEffectiveDebt(habit, date);
+    const base = habit.baseTaskValue || 0;
+    const todayTask = base + debtBeforeToday;
+    const isCompleted = completedValue >= base;
+    const newDebt = Math.max(0, todayTask - completedValue);
+
     const existing = getDailyStatus(habit, date);
     if (existing) {
-      existing.completed = completed;
-      existing.penaltyLevel = penaltyLevel;
+      existing.completed = isCompleted;
+      existing.completedValue = completedValue;
     } else {
-      habit.dailyStatuses.push({ date, completed, penaltyLevel });
+      habit.dailyStatuses.push({ date, completed: isCompleted, penaltyLevel: 0, completedValue });
     }
 
-    updateStreak(habit, date, completed);
-
-    // Completing today's requirement does NOT implicitly repay debt —
-    // that's a separate, explicit choice.
-    let debtSummary = getBuildDebtSummary(habit);
-    if (debtRepayment && debtRepayment > 0) {
-      if (debtRepayment > debtSummary.remainingDebt) {
-        throw new GuestDebtRepaymentError(
-          debtSummary.remainingDebt === 0
-            ? "You have no outstanding debt to repay."
-            : `Repayment amount cannot exceed your outstanding debt of ${debtSummary.remainingDebt}.`,
-        );
-      }
-      habit.debtRepayments.push({ amount: debtRepayment, date });
-      debtSummary = getBuildDebtSummary(habit);
-    }
-
+    habit.outstandingDebtUnits = newDebt;
+    updateStreak(habit, date, isCompleted);
     save(habits);
 
-    return { completed, penaltyLevel, debtSummary };
-  },
-
-  repayDebt(id: number, amount: number): ReturnType<typeof getBuildDebtSummary> {
-    const habits = load();
-    const habit = habits.find((h) => h.id === id);
-    if (!habit) throw new Error("Habit not found");
-
-    if (!Number.isInteger(amount) || amount < 1) {
-      throw new GuestDebtRepaymentError("Repayment amount must be a whole number of at least 1.");
-    }
-
-    const summary = getBuildDebtSummary(habit);
-    if (amount > summary.remainingDebt) {
-      throw new GuestDebtRepaymentError(
-        summary.remainingDebt === 0
-          ? "You have no outstanding debt to repay."
-          : `Repayment amount cannot exceed your outstanding debt of ${summary.remainingDebt}.`,
-      );
-    }
-
-    habit.debtRepayments.push({ amount, date: todayStr() });
-    save(habits);
-
-    return getBuildDebtSummary(habit);
+    return {
+      id: 0,
+      habitId: id,
+      date,
+      completed: isCompleted,
+      penaltyLevel: 0,
+      completedValue,
+      autoProcessed: false,
+      debtSummary: { outstandingDebtUnits: newDebt },
+    };
   },
 
   clearAll(): void {

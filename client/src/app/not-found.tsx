@@ -48,7 +48,7 @@ export default function NotFound() {
 
         <p className="text-muted-foreground leading-relaxed mb-10">
           This route doesn&apos;t exist in the system. Discipline means staying
-          on the right path not matter what, let&apos;s get you back to it.
+          on the right path no matter what, let&apos;s get you back to it.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">

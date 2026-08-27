@@ -7,9 +7,6 @@ export const metadata = {
   description: "This route doesn't exist.",
 };
 
-// Same Lucide "shield" path used across the splash/manifest icons --
-// filled directly rather than stroked. Rendered here as a large, faint
-// watermark behind the error content for brand continuity.
 const shieldPath =
   "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z";
 
@@ -51,7 +48,7 @@ export default function NotFound() {
 
         <p className="text-muted-foreground leading-relaxed mb-10">
           This route doesn&apos;t exist in the system. Discipline means staying
-          on the path, let&apos;s get you back to it.
+          on the right path no matter what, let&apos;s get you back to it.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">

@@ -167,7 +167,7 @@ export function PWAInstallPrompt() {
               <h3 className="font-semibold">Install Protocol</h3>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                Install Protocol for quicker access and a better app-like
+                Install Protocol for quicker/offline access and a better app-like
                 experience.
               </p>
 

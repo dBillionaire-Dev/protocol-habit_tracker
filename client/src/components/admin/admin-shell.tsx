@@ -67,7 +67,7 @@ export function AdminShell({
           always visible as a normal static column instead. */}
       <div className="lg:hidden fixed top-0 inset-x-0 z-40 h-14 border-b border-border bg-background flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4" data-app-logo-icon />
+          <Shield className="w-4 h-4 text-red-700" data-app-logo-icon />
           <span className="font-bold tracking-tight text-sm">PROTOCOL Admin</span>
         </div>
         <button
@@ -97,7 +97,7 @@ export function AdminShell({
       >
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4" data-app-logo-icon />
+            <Shield className="w-4 h-4 text-red-700" data-app-logo-icon />
             <span className="font-bold tracking-tight">PROTOCOL</span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">Admin</p>

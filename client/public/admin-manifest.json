@@ -1,0 +1,38 @@
+{
+  "name": "Protocol Admin",
+  "short_name": "Admin",
+  "description": "Admin console for Protocol — manage users, subscriptions, support, and system health.",
+  "start_url": "/admin",
+  "scope": "/admin",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b91c1c",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "admin-android-chrome-icon-only-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "admin-android-chrome-icon-only-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Users",
+      "url": "/admin/users",
+      "description": "Manage user accounts"
+    },
+    {
+      "name": "Support",
+      "url": "/admin/support",
+      "description": "View support tickets"
+    }
+  ]
+}

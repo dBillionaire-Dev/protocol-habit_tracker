@@ -1,7 +1,7 @@
 {
   "name": "Protocol Admin",
   "short_name": "Admin",
-  "description": "Admin console for Protocol — manage users, subscriptions, support, and system health.",
+  "description": "Admin console for Protocol, manage users, subscriptions, support, and system health.",
   "start_url": "/admin",
   "scope": "/admin",
   "display": "standalone",

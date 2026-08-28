@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { AdminSplash } from "@/components/admin-splash";
+import { AdminPWAInstallPrompt } from "@/components/admin-pwa-install-prompt";
 
 // Separate session-storage key from AppShell's "protocol-splash-shown" —
 // deliberately so a person visiting both the main app and /admin in the
@@ -50,6 +51,7 @@ export function AdminAppShell({ children }: AdminAppShellProps) {
   return (
     <>
       {children}
+      <AdminPWAInstallPrompt />
       <AnimatePresence mode="wait">
         {showSplash && <AdminSplash onComplete={handleSplashComplete} />}
       </AnimatePresence>

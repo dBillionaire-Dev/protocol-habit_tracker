@@ -5,6 +5,17 @@ import { usePathname } from "next/navigation";
 import { Download, X, Share, Smartphone, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+// Adapted directly from components/pwa-install-prompt.tsx — same
+// beforeinstallprompt/Apple-instructions logic, retargeted for
+// "Protocol Admin" specifically. This is what was actually missing
+// before: the main PWAInstallPrompt is mounted once at the ROOT layout
+// (wrapping /admin too), hardcoded to "Install Protocol" with no
+// awareness that /admin has its own separate manifest/identity — it's
+// now guarded to skip /admin entirely (see that file), and THIS
+// component is what actually offers to install "Protocol Admin" there.
+//
+// Mounted inside AdminAppShell (parallel to how AdminSplash is), so it
+// only ever renders under /admin.
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: string[];
   prompt: () => Promise<void>;
@@ -16,14 +27,10 @@ interface BeforeInstallPromptEvent extends Event {
 
 type ApplePlatform = "ios" | "macos" | null;
 
-export function PWAInstallPrompt() {
+const DISMISS_KEY = "admin-pwa-install-dismissed";
+
+export function AdminPWAInstallPrompt() {
   const pathname = usePathname();
-  // Mounted once at the root layout, so without this guard it wraps
-  // /admin too — and since it's hardcoded to "Install Protocol" with no
-  // awareness of the separate "Protocol Admin" PWA (see
-  // admin-pwa-install-prompt.tsx, its proper counterpart), showing it
-  // there would be actively wrong, not just redundant: it'd offer to
-  // install the MAIN app while the person is looking at /admin.
   const isAdminRoute = pathname?.startsWith("/admin") ?? false;
 
   const [installPrompt, setInstallPrompt] =
@@ -34,9 +41,15 @@ export function PWAInstallPrompt() {
   const [showInstructions, setShowInstructions] = useState(false);
 
   useEffect(() => {
-    if (isAdminRoute) return;
+    if (!isAdminRoute) return;
 
-    // Don't show inside an already-installed PWA.
+    // Don't show inside an already-installed PWA (this check alone
+    // can't distinguish "installed as Protocol" from "installed as
+    // Protocol Admin" — display-mode: standalone is true for either.
+    // In practice this only matters if someone installs one and then
+    // browses to the other's route inside that installed window, an
+    // edge case not worth more complexity than the main app's own
+    // version of this same check).
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as Navigator & { standalone?: boolean }).standalone ===
@@ -46,21 +59,17 @@ export function PWAInstallPrompt() {
       return;
     }
 
-    // Don't show again after the user dismissed it during this session.
-    if (sessionStorage.getItem("pwa-install-dismissed") === "true") {
+    if (sessionStorage.getItem(DISMISS_KEY) === "true") {
       return;
     }
 
     const userAgent = window.navigator.userAgent;
     const platform = window.navigator.platform || "";
 
-    // iPhone / iPad / iPod.
-    // iPadOS 13+ can report itself as Mac, so also check touch points.
     const isIOS =
       /iPhone|iPad|iPod/i.test(userAgent) ||
       (platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-    // Safari on macOS.
     const isSafari =
       /Safari/i.test(userAgent) &&
       !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/i.test(userAgent);
@@ -79,32 +88,18 @@ export function PWAInstallPrompt() {
       return;
     }
 
-    // Chromium browsers on Android, Windows, Linux and macOS.
-    // These use the native browser installation prompt.
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
-
       const installEvent = event as BeforeInstallPromptEvent;
-
       setInstallPrompt(installEvent);
       setVisible(true);
     };
 
-    window.addEventListener(
-      "beforeinstallprompt",
-      handleBeforeInstallPrompt
-    );
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     return () => {
-      window.removeEventListener(
-        "beforeinstallprompt",
-        handleBeforeInstallPrompt
-      );
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     };
-    // isAdminRoute included so navigating between /admin and everywhere
-    // else within the same session correctly attaches/detaches this
-    // listener rather than leaving a stale one from before the guard
-    // above took effect.
   }, [isAdminRoute]);
 
   useEffect(() => {
@@ -113,14 +108,13 @@ export function PWAInstallPrompt() {
     const timer = window.setTimeout(() => {
       setVisible(false);
       setShowInstructions(false);
-      sessionStorage.setItem("pwa-install-dismissed", "true");
+      sessionStorage.setItem(DISMISS_KEY, "true");
     }, 10_000);
 
     return () => window.clearTimeout(timer);
   }, [visible]);
 
   const handleInstall = async () => {
-    // Apple devices don't expose beforeinstallprompt.
     if (applePlatform) {
       setShowInstructions(true);
       return;
@@ -129,7 +123,6 @@ export function PWAInstallPrompt() {
     if (!installPrompt) return;
 
     await installPrompt.prompt();
-
     const { outcome } = await installPrompt.userChoice;
 
     if (outcome === "accepted") {
@@ -142,20 +135,19 @@ export function PWAInstallPrompt() {
   const handleDismiss = () => {
     setVisible(false);
     setShowInstructions(false);
-    sessionStorage.setItem("pwa-install-dismissed", "true");
+    sessionStorage.setItem(DISMISS_KEY, "true");
   };
 
   const handleCloseInstructions = () => {
     setShowInstructions(false);
   };
 
-  if (isAdminRoute || !visible) {
+  if (!isAdminRoute || !visible) {
     return null;
   }
 
   return (
     <>
-      {/* Main install prompt */}
       <div
         role="alert"
         className="fixed bottom-4 right-4 z-[100] w-[calc(100%-2rem)] max-w-sm animate-in slide-in-from-bottom-4 duration-300"
@@ -171,7 +163,11 @@ export function PWAInstallPrompt() {
           </button>
 
           <div className="flex gap-3 pr-5">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {/* Red accent, matching the rest of the Protocol Admin
+                identity (admin-shell's header icon, admin-splash's
+                shield) rather than the main app's theme-token primary
+                color used in pwa-install-prompt.tsx. */}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-700/10 text-red-700">
               {applePlatform === "macos" ? (
                 <Monitor className="h-5 w-5" />
               ) : (
@@ -180,17 +176,17 @@ export function PWAInstallPrompt() {
             </div>
 
             <div className="min-w-0">
-              <h3 className="font-semibold">Install Protocol</h3>
+              <h3 className="font-semibold">Install Protocol Admin</h3>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                Install Protocol for quicker/offline access and a better app-like
-                experience.
+                Install Protocol Admin for quicker access to the admin console, separate
+                from the main Protocol app.
               </p>
 
               <Button
                 type="button"
                 size="sm"
-                className="mt-3"
+                className="mt-3 bg-red-700 hover:bg-red-800 text-white"
                 onClick={handleInstall}
               >
                 {applePlatform ? (
@@ -210,13 +206,12 @@ export function PWAInstallPrompt() {
         </div>
       </div>
 
-      {/* Apple installation instructions */}
       {showInstructions && applePlatform && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="install-protocol-title"
+          aria-labelledby="install-protocol-admin-title"
         >
           <div className="relative w-full max-w-md rounded-2xl border bg-background p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <button
@@ -229,7 +224,7 @@ export function PWAInstallPrompt() {
             </button>
 
             <div className="mb-6 flex items-center gap-3 pr-8">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-700/10 text-red-700">
                 {applePlatform === "ios" ? (
                   <Smartphone className="h-6 w-6" />
                 ) : (
@@ -238,16 +233,13 @@ export function PWAInstallPrompt() {
               </div>
 
               <div>
-                <h2
-                  id="install-protocol-title"
-                  className="text-lg font-bold"
-                >
-                  Install Protocol
+                <h2 id="install-protocol-admin-title" className="text-lg font-bold">
+                  Install Protocol Admin
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {applePlatform === "ios"
-                    ? "Add Protocol to your Home Screen"
-                    : "Add Protocol to your Dock"}
+                    ? "Add Protocol Admin to your Home Screen"
+                    : "Add Protocol Admin to your Dock"}
                 </p>
               </div>
             </div>
@@ -260,22 +252,19 @@ export function PWAInstallPrompt() {
                   description="In Safari, tap the Share button at the bottom of the screen."
                   icon={<Share className="h-4 w-4" />}
                 />
-
                 <InstallStep
                   number="2"
                   title="Add to Home Screen"
                   description='Scroll down and select "Add to Home Screen".'
                 />
-
                 <InstallStep
                   number="3"
                   title="Tap Add"
-                  description='Tap "Add" in the top-right corner to install Protocol.'
+                  description='Tap "Add" in the top-right corner to install Protocol Admin.'
                 />
-
                 <div className="mt-6 rounded-lg bg-muted/50 p-3 text-center text-xs text-muted-foreground">
-                  Protocol will appear on your Home Screen and open like an
-                  app.
+                  Protocol Admin will appear on your Home Screen as its own app, separate
+                  from Protocol.
                 </div>
               </div>
             ) : (
@@ -285,30 +274,20 @@ export function PWAInstallPrompt() {
                   title="Open the Safari menu"
                   description='In Safari, open the "File" menu or the Share menu.'
                 />
-
-                <InstallStep
-                  number="2"
-                  title="Add to Dock"
-                  description='Select "Add to Dock".'
-                />
-
+                <InstallStep number="2" title="Add to Dock" description='Select "Add to Dock".' />
                 <InstallStep
                   number="3"
                   title="Confirm"
-                  description='Click "Add" to install Protocol as a Mac web app.'
+                  description='Click "Add" to install Protocol Admin as a Mac web app.'
                 />
-
                 <div className="mt-6 rounded-lg bg-muted/50 p-3 text-center text-xs text-muted-foreground">
-                  Protocol will appear in your Dock and Applications folder.
+                  Protocol Admin will appear in your Dock and Applications folder, separate
+                  from Protocol.
                 </div>
               </div>
             )}
 
-            <Button
-              type="button"
-              className="mt-6 w-full"
-              onClick={handleCloseInstructions}
-            >
+            <Button type="button" className="mt-6 w-full bg-red-700 hover:bg-red-800 text-white" onClick={handleCloseInstructions}>
               Got it
             </Button>
           </div>
@@ -331,7 +310,7 @@ function InstallStep({
 }) {
   return (
     <div className="flex gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-700 text-sm font-bold text-white">
         {number}
       </div>
 

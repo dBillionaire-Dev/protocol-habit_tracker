@@ -46,6 +46,11 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Protocol",
+  },
   robots: {
     index: true,
     follow: true,
@@ -68,11 +73,23 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="manifest" href="/manifest.json" />
+        {/* Deliberately NOT hardcoding <link rel="manifest">,
+            apple-mobile-web-app-capable/status-bar-style/title here
+            anymore -- they used to be raw JSX, which (since only the
+            root layout can render <head> at all) meant they were
+            ALWAYS present on every page, including /admin, alongside
+            whatever nested layouts like app/admin/layout.tsx declared
+            via the Metadata API. That produced two competing <link
+            rel="manifest"> tags (and two apple-mobile-web-app-title
+            tags) on /admin, with undefined/inconsistent
+            browser-dependent resolution -- which is exactly why
+            installing "Protocol Admin" from /admin was being detected
+            as "already installed" and opening the main Protocol app
+            instead. Expressing these via the `metadata` object above
+            (manifest, appleWebApp) instead lets Next.js's per-segment
+            metadata merging actually override them correctly for
+            nested routes, producing exactly one of each tag. */}
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Protocol" />
         <meta name="msapplication-TileColor" content="#000000" />
 
         {/* iOS static launch screens -- no animation is possible before
